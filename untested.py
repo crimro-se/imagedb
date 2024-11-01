@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from multiprocessing import Queue, Process, Manager
+from queue import Empty
 import base64
 import time
 import uuid
@@ -9,34 +10,63 @@ from transformers import CLIPProcessor, CLIPModel
 from PIL import Image
 import io
 
+BATCH_SIZE = 10  # Define the batch size
+
+
+
+
 def process_tasks(task_queue, results):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
     processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
     while True:
+        batch = []
+        # we block to get a task to avoid busy looping...
         task = task_queue.get()
         if task is None:
-            # Stop signal
+            break # Stop signal
+        batch.append(task)
+        # now we fill up the batch as much as possible
+        if not get_additional_tasks(batch, task_queue):
             break
-        task_id, image_data, text_data = task
-        try:
-            embeddings = {}
+
+        img_batch, txt_batch = [],[]
+        images, texts = [],[]
+        print (len(batch))
+        for t in batch:
+            task_id, image_data, text_data = t
             if image_data:
-                image = Image.open(io.BytesIO(base64.b64decode(image_data)))
-                inputs = processor(images=image, return_tensors="pt").to(device)
-                with torch.no_grad():
-                    image_embeddings = model.get_image_features(**inputs)
-                embeddings['image'] = image_embeddings.cpu().numpy().tolist()
+                img_batch.append((task_id, base64.b64decode(image_data)))
             if text_data:
-                inputs = processor(text=text_data, return_tensors="pt").to(device)
-                with torch.no_grad():
-                    text_embeddings = model.get_text_features(**inputs)
-                embeddings['text'] = text_embeddings.cpu().numpy().tolist()
-            results[task_id] = embeddings
-            print(embeddings)
-        except Exception as e:
-            results[task_id] = {'error': str(e)}
+                txt_batch.append((task_id, text_data))
+
+        if img_batch:
+            images = [Image.open(io.BytesIO(data[1])) for data in img_batch]
+            inputs = processor(images=images, return_tensors="pt").to(device)
+            with torch.no_grad():
+                image_embeddings = model.get_image_features(**inputs).cpu().numpy().tolist()
+            for i, emb in enumerate(image_embeddings):
+                results[img_batch[i][0]] = image_embeddings[i]
+        
+        if txt_batch:
+            texts = [t[1] for t in txt_batch]
+            inputs = processor(text=texts, return_tensors="pt").to(device)
+            with torch.no_grad():
+                text_embeddings = model.get_text_features(**inputs).cpu().numpy().tolist()
+                for i, emb in enumerate(text_embeddings):
+                    results[txt_batch[i][0]] = emb
+
+def get_additional_tasks(batch, q):
+    try: 
+        while len(batch) < BATCH_SIZE:
+            task = q.get_nowait()
+            if task is None: 
+                return False
+            batch.append(task)
+    except Empty:
+        return True
+    return True
 
 if __name__ == '__main__':
     mp.set_start_method('spawn')
