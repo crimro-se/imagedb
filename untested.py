@@ -47,7 +47,7 @@ def process_tasks(task_queue, results):
             with torch.no_grad():
                 image_embeddings = model.get_image_features(**inputs).cpu().numpy().tolist()
             for i, emb in enumerate(image_embeddings):
-                results[img_batch[i][0]] = image_embeddings[i]
+                results[img_batch[i][0]] = emb
         
         if txt_batch:
             texts = [t[1] for t in txt_batch]
