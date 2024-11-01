@@ -46,7 +46,7 @@ if __name__ == '__main__':
     # Shared Queue for Tasks
     task_queue = Queue()
 
-    # Shared Dictionary for Results (simplified for demo; not suitable for large-scale production)
+    # Shared Dictionary for results
     mgr = Manager() 
     results = mgr.dict()
 
@@ -75,6 +75,7 @@ if __name__ == '__main__':
         if id not in results:
             return jsonify({'error': 'Result not found or not yet processed'}), 404
         return jsonify({'id': id, 'result': results[id]}), 200
+    
     try:
         app.run(debug=False)
     finally:
