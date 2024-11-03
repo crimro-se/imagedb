@@ -118,7 +118,6 @@ def process_tasks(task_queue, results):
 
         img_batch, txt_batch = [],[]
         images, texts = [],[]
-        print (len(batch))
         for t in batch:
             task_id, image_data, text_data = t
             if image_data:
