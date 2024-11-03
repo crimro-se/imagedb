@@ -43,10 +43,10 @@ type ImagePayload struct {
 
 func TestSendBase64Image(t *testing.T) {
 	// Create JSON payload
-	payload := ImagePayload{
+	payload := []ImagePayload{{
 		Image: testimg_b64,
 		Id:    "example_image",
-	}
+	}}
 
 	// Marshal payload to JSON
 	jsonPayload, err := json.Marshal(payload)

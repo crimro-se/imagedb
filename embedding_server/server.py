@@ -175,27 +175,37 @@ if __name__ == '__main__':
     @app.route('/process', methods=['POST'])
     def process_endpoint():
         data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No JSON data received'}), 400
+        if not isinstance(data, list):
+            return jsonify({'error': 'Expecting a JSON array of tasks'}), 400
         
-        task_id = data.get('id') or str(uuid.uuid4())
-        image_data = data.get('image')
-        text_data = data.get('text')
+        task_ids = []
+        for item in data:
+            task_id = item.get('id') or str(uuid.uuid4())
+            image_data = item.get('image')
+            text_data = item.get('text')
+            
+            if not (image_data or text_data):
+                return jsonify({'error': 'Either image or text data is required'}), 400
+            
+            if (image_data and text_data):
+                return jsonify({'error': 'Submit an image or text, not both'}), 400
+            
+            task_queue.put((task_id, image_data, text_data))
+            task_ids.append(task_id)
         
-        if not (image_data or text_data):
-            return jsonify({'error': 'Either image or text data is required'}), 400
-        
-        if (image_data and text_data):
-            return jsonify({'error': 'Submit an image or text, not both'}), 400
-        
-        task_queue.put((task_id, image_data, text_data))
-        return jsonify({'message': 'Task submitted successfully', 'id': task_id}), 202
+        return jsonify({'message': f'{len(data)} tasks submitted successfully', 
+                        'ids': task_ids, 'accepted_all': len(data) == len(task_ids)}), 202
 
-    @app.route('/result/<string:id>', methods=['GET'])
-    def result_endpoint(id):
-        if id not in results:
-            return jsonify({'error': 'Result not found or not yet processed'}), 404
-        return jsonify({'id': id, 'result': results[id]}), 200
+    @app.route('/results', methods=['GET'])
+    def results_endpoint():
+        result_list = []    
+        # Pop results one by one to avoid race conditions
+        keys_to_remove = list(results.keys())
+        for key in keys_to_remove:
+            # we could consider double checking the key still exists for every pop, but...
+            result_list.append((key, results.pop(key)))
+        
+        return jsonify(dict(result_list)), 200
     
     try:
         app.run(debug=False)
