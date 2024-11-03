@@ -92,13 +92,17 @@ def normalized_pt(a: torch.Tensor, axis: int = -1, order: int = 2) -> torch.Tens
 
 def process_tasks(task_queue, results):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14").to(device)
+    model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14",
+                                      # attn_implementation="flash_attention_2",
+                                      torch_dtype=torch.float16).to(device)
+    model = torch.compile(model)
     processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
     aesthetic = MLP(768)
     #s = torch.load("sac+logos+ava1-l14-linearMSE.pth")
     s = load_file("sac+logos+ava1-l14-linearMSE.safetensors")
     aesthetic.load_state_dict(s)
-    aesthetic.to(device)
+    aesthetic.to(device=device, dtype=torch.float16)
+    aesthetic = torch.compile(aesthetic)
 
 
     while True:
