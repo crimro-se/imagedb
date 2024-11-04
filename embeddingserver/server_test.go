@@ -1,4 +1,4 @@
-package main
+package embeddingserver
 
 import (
 	"bytes"
@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"image"
 	"image/png"
-	"io/ioutil"
+	"io"
+	"log"
 	"net/http"
 	"testing"
+	"time"
 )
 
 var testimg_b64 string = `
@@ -237,7 +239,7 @@ func TestSendBase64Image(t *testing.T) {
 	defer resp.Body.Close()
 
 	// Read response body
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Errorf("Failed to read response body: %v", err)
 		return
@@ -250,4 +252,24 @@ func TestSendBase64Image(t *testing.T) {
 	}
 
 	fmt.Printf("Test successful. Server responded with: %s\n", string(respBody))
+}
+
+func TestEmbServer(t *testing.T) {
+	client := New("http://localhost:5000")
+	img, err := base64.StdEncoding.DecodeString(testimg_b64)
+	if err != nil {
+		t.Error(err)
+	}
+	err = client.SubmitImageTask("test", img)
+	if err != nil {
+		log.Fatalf("failed to submit image task: %v", err)
+	}
+
+	time.Sleep(1 * time.Second)
+	var results Embeddings
+	results, err = client.CollectResults(results)
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println(results["test"].Embedding)
 }

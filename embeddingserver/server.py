@@ -134,7 +134,7 @@ def process_tasks(task_queue, results):
                 aesthetic_scores = aesthetic(emb_norm).cpu().numpy().tolist()
                 image_embeddings = clip_emb.cpu().numpy().tolist()
             for i, emb in enumerate(image_embeddings):
-                results[img_batch[i][0]] = (emb, aesthetic_scores[i])
+                results[img_batch[i][0]] = {"embedding":emb,"aesthetic": aesthetic_scores[i][0]}
         
         if txt_batch:
             texts = [t[1] for t in txt_batch]
@@ -142,7 +142,7 @@ def process_tasks(task_queue, results):
             with torch.no_grad():
                 text_embeddings = model.get_text_features(**inputs).cpu().numpy().tolist()
                 for i, emb in enumerate(text_embeddings):
-                    results[txt_batch[i][0]] = emb
+                    results[txt_batch[i][0]] = {"embedding":emb,"aesthetic": 0}
 
 def get_additional_tasks(batch, q):
     try: 
