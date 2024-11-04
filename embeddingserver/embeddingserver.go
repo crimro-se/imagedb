@@ -66,6 +66,7 @@ func (c *Client) CollectResults(results Embeddings) (Embeddings, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
+	c.PendingRequests -= len(results)
 	return results, nil
 }
 
