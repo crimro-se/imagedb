@@ -118,9 +118,17 @@ func TestEmbServer(t *testing.T) {
 	}
 
 	time.Sleep(1 * time.Second)
-	var results Embeddings
+	var results = make(Embeddings, 0)
+	results["xd"] = struct {
+		Embedding [768]float32 "json:\"embedding\""
+		Aesthetic float32      "json:\"aesthetic\""
+	}{Aesthetic: -1}
 	results, err = client.CollectResults(results)
 	if err != nil {
 		t.Error(err)
+	}
+	// checks results map isn't replaced
+	if results["xd"].Aesthetic != -1 {
+		t.Fail()
 	}
 }

@@ -182,6 +182,12 @@ if __name__ == '__main__':
             task_id = item.get('id') or str(uuid.uuid4())
             image_data = item.get('image')
             text_data = item.get('text')
+
+            if image_data and len(image_data) == 0:
+                image_data = None
+
+            if text_data and len(text_data) == 0:
+                text_data = None
             
             if not (image_data or text_data):
                 return jsonify({'error': 'Either image or text data is required'}), 400

@@ -16,10 +16,15 @@ type Embeddings map[string]struct {
 	Aesthetic float32      `json:"aesthetic"`
 }
 
+type Task struct {
+	Id    string `json:"id"`
+	Image string `json:"image"`
+	Text  string `json:"text"`
+}
+
 // Client represents the client that interacts with the image processing server.
 type Client struct {
-	ServerURL       string // URL of the server endpoint
-	PendingRequests int
+	ServerURL string // URL of the server endpoint
 }
 
 // NewClient creates a new instance of Client.
@@ -29,24 +34,38 @@ func New(serverURL string) *Client {
 	}
 }
 
-// SubmitImageTask submits an image for processing along with its ID.
-func (c *Client) SubmitImageTask(id string, imageData []byte) error {
-	payload := map[string]interface{}{
-		"id":    id,
-		"image": base64.StdEncoding.EncodeToString(imageData),
+/*
+// SubmitImageTasks submits a list of image tasks for processing.
+func (c *Client) SubmitImageTasks(imageIDs []string, imageDataList [][]byte) ([]string, error) {
+
+	if len(imageIDs) != len(imageDataList) {
+		return nil, fmt.Errorf("imageIDs and data length missmatch")
 	}
 
-	return c.submitTask(payload)
+	if len(imageDataList) < 1 {
+		return nil, fmt.Errorf("nothing submitted")
+	}
+}
+*/
+
+// SubmitImageTask submits an image for processing along with its ID.
+func (c *Client) SubmitImageTask(id string, imageData []byte) error {
+	payload := []Task{{
+		Id:    id,
+		Image: base64.StdEncoding.EncodeToString(imageData),
+	}}
+
+	return c.submitTasks(payload)
 }
 
 // SubmitTextTask submits text for processing along with its ID.
 func (c *Client) SubmitTextTask(id string, text string) error {
-	payload := map[string]interface{}{
-		"id":   id,
-		"text": text,
-	}
+	payload := []Task{{
+		Id:   id,
+		Text: text,
+	}}
 
-	return c.submitTask(payload)
+	return c.submitTasks(payload)
 }
 
 // CollectResults collects the results from the server.
@@ -66,13 +85,12 @@ func (c *Client) CollectResults(results Embeddings) (Embeddings, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
-	c.PendingRequests -= len(results)
 	return results, nil
 }
 
-// submitTask sends a task to the server for processing.
-func (c *Client) submitTask(payload map[string]interface{}) error {
-	payloadJSON, err := json.Marshal([]map[string]interface{}{payload})
+// submitTasks sends tasks to the server for processing.
+func (c *Client) submitTasks(payload []Task) error {
+	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
@@ -100,7 +118,6 @@ func (c *Client) submitTask(payload map[string]interface{}) error {
 	if err != nil {
 		return fmt.Errorf("failed to decode server response: %w", err)
 	}
-	c.PendingRequests += 1
 	fmt.Printf("Task submitted successfully with result: %+v\n", result)
 
 	return nil
