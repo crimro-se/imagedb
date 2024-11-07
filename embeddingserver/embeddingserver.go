@@ -34,19 +34,27 @@ func New(serverURL string) *Client {
 	}
 }
 
-/*
 // SubmitImageTasks submits a list of image tasks for processing.
-func (c *Client) SubmitImageTasks(imageIDs []string, imageDataList [][]byte) ([]string, error) {
+func (c *Client) SubmitImageTasks(imageIDs []string, imageDataList [][]byte) error {
 
 	if len(imageIDs) != len(imageDataList) {
-		return nil, fmt.Errorf("imageIDs and data length missmatch")
+		return fmt.Errorf("imageIDs and data length missmatch")
 	}
 
 	if len(imageDataList) < 1 {
-		return nil, fmt.Errorf("nothing submitted")
+		return fmt.Errorf("nothing submitted")
 	}
+
+	payload := make([]Task, 0, len(imageIDs))
+	for i, bytes := range imageDataList {
+		payload = append(payload,
+			Task{
+				Id:    imageIDs[i],
+				Image: base64.StdEncoding.EncodeToString(bytes),
+			})
+	}
+	return c.submitTasks(payload)
 }
-*/
 
 // SubmitImageTask submits an image for processing along with its ID.
 func (c *Client) SubmitImageTask(id string, imageData []byte) error {
