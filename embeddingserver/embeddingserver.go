@@ -27,7 +27,7 @@ type Client struct {
 	ServerURL string // URL of the server endpoint
 }
 
-// NewClient creates a new instance of Client.
+// New creates a new instance of Client.
 func New(serverURL string) *Client {
 	return &Client{
 		ServerURL: serverURL,
