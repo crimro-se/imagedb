@@ -2,7 +2,6 @@ package main
 
 import (
 	_ "embed"
-	"fmt"
 	"testing"
 
 	"github.com/jmoiron/sqlx"
@@ -79,7 +78,10 @@ func TestDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println((imgs2))
+	if imgs2[0].ID != 10 {
+		t.Fail()
+	}
+	//fmt.Println((imgs2))
 
 	db.Close()
 }
