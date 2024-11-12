@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS images (
 -- TODO: CreatedAt
 
 CREATE VIRTUAL TABLE IF NOT EXISTS embeddings USING vec0 (
-    embedding FLOAT[8]
+    embedding FLOAT[768]
 );
 
 /* queries reference

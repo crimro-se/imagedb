@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	_ "embed"
 	"errors"
-	"fmt"
-	"strings"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/jmoiron/sqlx"
@@ -48,18 +46,26 @@ func (s *Database) CreateUpdateEmbedding(img *Image, emb []float32) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.con.Exec("INSERT OR REPLACE INTO embeddings (rowid, embedding) VALUES (?, ?)", img.ID, embedding)
+	_, err = s.con.Exec(`
+	INSERT OR REPLACE INTO embeddings 
+		   (rowid, embedding) 
+	VALUES (?, ?)`, img.ID, embedding)
 	return err
 }
 
-// useID - will set rowid in query if true, otherwise it's left to fate.
-// be careful with this.
+// Creates or updates an img in the database.
 func (s *Database) CreateUpdateImage(img *Image) error {
 	var err error
 	if img.ID > 0 {
-		_, err = s.con.NamedExec("INSERT OR REPLACE INTO images (rowid, relative_path, sub_path, tags) VALUES (:rowid, :relative_path, :sub_path, :tags)", img)
+		_, err = s.con.NamedExec(`
+		INSERT OR REPLACE INTO images 
+			   (rowid, relative_path, sub_path, tags) 
+		VALUES (:rowid, :relative_path, :sub_path, :tags)`, img)
 	} else {
-		_, err = s.con.NamedExec("INSERT OR REPLACE INTO images (relative_path, sub_path, tags) VALUES (:relative_path, :sub_path, :tags)", img)
+		_, err = s.con.NamedExec(`
+		INSERT OR REPLACE INTO images 
+			   (relative_path, sub_path, tags) 
+		VALUES (:relative_path, :sub_path, :tags)`, img)
 	}
 	return err
 }
@@ -67,7 +73,11 @@ func (s *Database) CreateUpdateImage(img *Image) error {
 // returns some images from the db
 func (s *Database) ReadImages(limit int) ([]Image, error) {
 	imgs := make([]Image, 0)
-	err := s.con.Select(&imgs, "SELECT rowid,* FROM images ORDER BY relative_path LIMIT ?", limit)
+	err := s.con.Select(&imgs, `
+	SELECT rowid,* 
+	FROM images 
+	ORDER BY relative_path 
+	LIMIT ?`, limit)
 	return imgs, err
 }
 
@@ -76,7 +86,11 @@ func (s *Database) ReadImages(limit int) ([]Image, error) {
 func (s *Database) MatchImages(search string, limit int) ([]Image, error) {
 	imgs := make([]Image, 0)
 	search = "%" + search + "%"
-	err := s.con.Select(&imgs, "SELECT rowid,* FROM images WHERE relative_path LIKE ? OR sub_path LIKE ? LIMIT ?", search, search, limit)
+	err := s.con.Select(&imgs, `
+	SELECT rowid,* FROM images 
+	WHERE relative_path LIKE ? OR 
+		sub_path LIKE ? 
+	LIMIT ?`, search, search, limit)
 	return imgs, err
 }
 
@@ -93,33 +107,22 @@ func (s *Database) MatchEmbeddings(target []float32, limit int) ([]Image, error)
 		return images, err
 	}
 
-	//todo perf & accuracy check these.
-	//nb: can't join with the virtual table yet.
-	err = s.con.Select(&images, "WITH emb AS (SELECT rowid,distance FROM embeddings WHERE embedding match ? order by distance LIMIT ?) SELECT images.rowid,images.* FROM images, emb WHERE images.rowid = emb.rowid ORDER BY emb.distance ASC", targetEmbedding, limit)
-	//err = s.con.Select(&images, "select rowid,* FROM images WHERE images.rowid IN (SELECT rowid FROM embeddings WHERE embedding match ? order by distance LIMIT ?)", targetEmbedding, limit)
+	//nb: can't join with the virtual table.
+	err = s.con.Select(&images, `
+		WITH emb AS (
+			SELECT rowid,distance 
+			FROM embeddings 
+			WHERE embedding match ? 
+			ORDER BY distance 
+			LIMIT ?
+		) 
+		SELECT images.rowid,images.* 
+		FROM images, emb 
+		WHERE images.rowid = emb.rowid 
+		ORDER BY emb.distance ASC`, targetEmbedding, limit)
+
 	return images, err
 
-}
-
-/*
-	for row.Next() {
-		var i int64
-		err = row.Scan(&i)
-		if err != nil {
-			return images, err
-		}
-		rowids = append(rowids, i)
-	}
-	if len(rowids) > 0 {
-		// nb: query parameter substitution seems unfamiliar with the array syntax.
-		err = s.con.Select(&images, "select rowid,* FROM images where images.rowid IN ("+arrayToString(rowids, ",")+")")
-	}
-	return images, err
-}
-*/
-
-func arrayToString(a []int64, delim string) string {
-	return strings.Trim(strings.Replace(fmt.Sprint(a), " ", delim, -1), "[]")
 }
 
 func (s *Database) Close() {

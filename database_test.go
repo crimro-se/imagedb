@@ -55,18 +55,27 @@ func TestDatabase(t *testing.T) {
 		t.Fail()
 	}
 
-	emb := []float32{1.0, 1.0, 1.0, 1.0, 1.0, .0, 1.0, 2.0}
+	emb := make([]float32, 768)
+	emb[0] = 1
+	emb[1] = 1
+	emb[3] = 2
 	err = db.CreateUpdateEmbedding(&imgBest, emb)
 	if err != nil {
 		t.Fatal(err)
 	}
-	emb = []float32{1.0, 1.0, 1.0, 1.0, 1.0, .0, 1.0, 1.0}
+
+	emb[0] = 1
+	emb[1] = 1
+	emb[3] = 1
 	err = db.CreateUpdateEmbedding(&img1, emb)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	imgs2, err := db.MatchEmbeddings([]float32{1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0}, 2)
+	emb[0] = 1
+	emb[1] = 1
+	emb[3] = 1.9
+	imgs2, err := db.MatchEmbeddings(emb, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
