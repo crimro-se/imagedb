@@ -54,6 +54,9 @@ func (s *Database) CreateUpdateEmbedding(img *Image, emb []float32) error {
 }
 
 // Creates or updates an img in the database.
+// if image.ID is 0 it'll be automatically set.
+// (this is fine as sqlite rowids start at 1)
+// TODO: api change, consider returning the ID chosen by the database.
 func (s *Database) CreateUpdateImage(img *Image) error {
 	var err error
 	if img.ID > 0 {
@@ -63,7 +66,7 @@ func (s *Database) CreateUpdateImage(img *Image) error {
 		VALUES (:rowid, :relative_path, :sub_path, :tags)`, img)
 	} else {
 		_, err = s.con.NamedExec(`
-		INSERT OR REPLACE INTO images 
+		INSERT INTO images 
 			   (relative_path, sub_path, tags) 
 		VALUES (:relative_path, :sub_path, :tags)`, img)
 	}
