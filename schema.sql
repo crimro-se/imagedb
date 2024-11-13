@@ -17,12 +17,14 @@ CREATE TABLE IF NOT EXISTS images (
   filesize INTEGER NOT NULL,
   FOREIGN KEY (basedir_id) REFERENCES basedir(rowid)
 );
+CREATE INDEX IF NOT EXISTS images_basedir_id_idx ON images(basedir_id);
 CREATE INDEX IF NOT EXISTS images_aesthetic_idx ON images(aesthetic);
 CREATE UNIQUE INDEX IF NOT EXISTS images_path_idx ON images(parent_path, sub_path);
 -- TODO: CreatedAt?
 
 
--- uses 'rowid' innate primary key. 
+-- uses 'rowid' innate primary key.
+-- can only have 1:1 relationship with images, as rowid is both pk and foreign key.
 CREATE VIRTUAL TABLE IF NOT EXISTS embeddings USING vec0 (
     embedding float[768]
 );
