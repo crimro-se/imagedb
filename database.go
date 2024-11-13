@@ -133,17 +133,15 @@ func (s *Database) MatchImagesByPath(parent_path, sub_path string, limit, offset
 // note/todo: currently joining with the vector virtual table doesn't seem to work, so implemented as two queries for now.
 func (s *Database) MatchEmbeddings(target []float32, limit int) ([]Image, error) {
 	if limit <= 0 {
-		return nil, errors.New("limit <= 0, what are you doing?")
-	}
-	images := make([]Image, 0)
-	//rowids := make([]int64, 0)
-	targetEmbedding, err := sqlite_vec.SerializeFloat32(target)
-	if err != nil {
-		return images, err
+		return nil, errors.New("limit must be greater than zero")
 	}
 
-	//nb: can't join with the virtual table.
-	err = s.con.Select(&images, `
+	targetEmbedding, err := sqlite_vec.SerializeFloat32(target)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize target embedding: %w", err)
+	}
+
+	const query = `
 		WITH emb AS (
 			SELECT rowid,distance 
 			FROM embeddings 
@@ -154,10 +152,14 @@ func (s *Database) MatchEmbeddings(target []float32, limit int) ([]Image, error)
 		SELECT images.rowid,images.* 
 		FROM images, emb 
 		WHERE images.rowid = emb.rowid 
-		ORDER BY emb.distance ASC`, targetEmbedding, limit)
+		ORDER BY emb.distance ASC`
+	images := make([]Image, 0)
+	err = s.con.Select(&images, query, targetEmbedding, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to match embeddings: %w", err)
+	}
 
 	return images, err
-
 }
 
 func (s *Database) Close() {
