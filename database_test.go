@@ -42,11 +42,18 @@ func TestDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	tst, err := db.FindImagesByPath("Worst Embedding", "", 3, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tst) != 1 {
+		t.Fail()
+	}
 	err = db.CreateUpdateImage(&imgBest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	imgs, err := db.MatchImages("Embedding", 3)
+	imgs, err := db.ReadImages(3, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,6 +89,8 @@ func TestDatabase(t *testing.T) {
 		t.Fail()
 	}
 	//fmt.Println((imgs2))
+
+	//
 
 	db.Close()
 }

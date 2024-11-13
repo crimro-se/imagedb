@@ -13,10 +13,11 @@ import (
 var dbSchema string
 
 type Image struct {
-	ID      int64          `db:"rowid"`
-	Path    string         `db:"relative_path"`
-	SubPath sql.NullString `db:"sub_path"`
-	Tags    sql.NullString `db:"tags"`
+	ID        int64           `db:"rowid"`
+	Path      string          `db:"relative_path"`
+	SubPath   sql.NullString  `db:"sub_path"`
+	Tags      sql.NullString  `db:"tags"`
+	Aesthetic sql.NullFloat64 `db:"aesthetic"`
 }
 
 type Database struct {
@@ -40,7 +41,7 @@ func NewDatabase(file string, execSchema bool) (*Database, error) {
 }
 
 // creates or updates embedding for specified Image.
-// img ID must be correct.
+// img.ID must be correct.
 func (s *Database) CreateUpdateEmbedding(img *Image, emb []float32) error {
 	embedding, err := sqlite_vec.SerializeFloat32(emb)
 	if err != nil {
@@ -62,38 +63,51 @@ func (s *Database) CreateUpdateImage(img *Image) error {
 	if img.ID > 0 {
 		_, err = s.con.NamedExec(`
 		INSERT OR REPLACE INTO images 
-			   (rowid, relative_path, sub_path, tags) 
-		VALUES (:rowid, :relative_path, :sub_path, :tags)`, img)
+			   (rowid, relative_path, sub_path, tags, aesthetic) 
+		VALUES (:rowid, :relative_path, :sub_path, :tags, :aesthetic)`, img)
 	} else {
 		_, err = s.con.NamedExec(`
 		INSERT INTO images 
-			   (relative_path, sub_path, tags) 
-		VALUES (:relative_path, :sub_path, :tags)`, img)
+			   (relative_path, sub_path, tags, aesthetic) 
+		VALUES (:relative_path, :sub_path, :tags, :aesthetic)`, img)
 	}
 	return err
 }
 
-// returns some images from the db
-func (s *Database) ReadImages(limit int) ([]Image, error) {
+// returns some images from the db, sorted by path
+func (s *Database) ReadImages(limit, offset int) ([]Image, error) {
 	imgs := make([]Image, 0)
 	err := s.con.Select(&imgs, `
 	SELECT rowid,* 
 	FROM images 
 	ORDER BY relative_path 
-	LIMIT ?`, limit)
+	LIMIT ? OFFSET ?`, limit, offset)
 	return imgs, err
 }
 
-// search path
-// TODO: fts5
-func (s *Database) MatchImages(search string, limit int) ([]Image, error) {
+// Finds the image entry in the database with the given path. (exact match)
+// May return multiple results for archives if subSearch isn't specified
+// TODO: fts5 version
+func (s *Database) FindImagesByPath(search, subSearch string, limit, offset int) ([]Image, error) {
+	if len(search) < 1 {
+		return nil, errors.New("search path shouldn't be empty")
+	}
 	imgs := make([]Image, 0)
-	search = "%" + search + "%"
-	err := s.con.Select(&imgs, `
-	SELECT rowid,* FROM images 
-	WHERE relative_path LIKE ? OR 
-		sub_path LIKE ? 
-	LIMIT ?`, search, search, limit)
+	var err error
+
+	if len(subSearch) > 0 {
+		err = s.con.Select(&imgs, `
+		SELECT rowid,* FROM images
+		WHERE relative_path = ? AND
+			sub_path = ?
+		LIMIT ? OFFSET ?`, search, subSearch, limit, offset)
+	} else {
+		err = s.con.Select(&imgs, `
+		SELECT rowid,* FROM images
+		WHERE relative_path = ? 
+		LIMIT ? OFFSET ?`, search, limit, offset)
+	}
+
 	return imgs, err
 }
 
