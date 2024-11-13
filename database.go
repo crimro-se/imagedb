@@ -130,7 +130,6 @@ func (s *Database) MatchImagesByPath(parent_path, sub_path string, limit, offset
 }
 
 // embedding search function
-// note/todo: currently joining with the vector virtual table doesn't seem to work, so implemented as two queries for now.
 func (s *Database) MatchEmbeddings(target []float32, limit int) ([]Image, error) {
 	if limit <= 0 {
 		return nil, errors.New("limit must be greater than zero")
