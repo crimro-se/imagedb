@@ -15,7 +15,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS embeddings USING vec0 (
     embedding FLOAT[768]
 );
 
-/* queries reference
+/* queries reference (database.go)
 
 CREATE
   CreateUpdateImage
@@ -23,10 +23,8 @@ CREATE
 
 READ
   ReadImages
-
-SEARCH
   MatchEmbeddings
-  MatchImages
+  MatchImagesByPath
 
 UPDATE
   CreateUpdateImage

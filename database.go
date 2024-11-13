@@ -24,6 +24,15 @@ type Database struct {
 	con *sqlx.DB
 }
 
+type SortOrder int
+
+const (
+	OrderByPathDesc SortOrder = iota
+	OrderByPathAsc
+	OrderByAestheticDesc
+	OrderByAestheticAsc
+)
+
 // obtain a new sqlx connection.
 // may optionally execute the schema
 // don't share the same connection to multiple threads
@@ -75,12 +84,12 @@ func (s *Database) CreateUpdateImage(img *Image) error {
 }
 
 // returns some images from the db, sorted by path
-func (s *Database) ReadImages(limit, offset int) ([]Image, error) {
+func (s *Database) ReadImages(limit, offset int, so SortOrder) ([]Image, error) {
 	imgs := make([]Image, 0)
 	err := s.con.Select(&imgs, `
 	SELECT rowid,* 
 	FROM images 
-	ORDER BY relative_path 
+    `+sortOrderToQuery(so)+`
 	LIMIT ? OFFSET ?`, limit, offset)
 	return imgs, err
 }
@@ -88,7 +97,7 @@ func (s *Database) ReadImages(limit, offset int) ([]Image, error) {
 // Finds the image entry in the database with the given path. (exact match)
 // May return multiple results for archives if subSearch isn't specified
 // TODO: fts5 version
-func (s *Database) FindImagesByPath(search, subSearch string, limit, offset int) ([]Image, error) {
+func (s *Database) MatchImagesByPath(search, subSearch string, limit, offset int) ([]Image, error) {
 	if len(search) < 1 {
 		return nil, errors.New("search path shouldn't be empty")
 	}
@@ -100,11 +109,13 @@ func (s *Database) FindImagesByPath(search, subSearch string, limit, offset int)
 		SELECT rowid,* FROM images
 		WHERE relative_path = ? AND
 			sub_path = ?
+		ORDER BY relative_path, sub_path
 		LIMIT ? OFFSET ?`, search, subSearch, limit, offset)
 	} else {
 		err = s.con.Select(&imgs, `
 		SELECT rowid,* FROM images
 		WHERE relative_path = ? 
+		ORDER BY relative_path, sub_path
 		LIMIT ? OFFSET ?`, search, limit, offset)
 	}
 
@@ -144,4 +155,18 @@ func (s *Database) MatchEmbeddings(target []float32, limit int) ([]Image, error)
 
 func (s *Database) Close() {
 	s.con.Close()
+}
+
+func sortOrderToQuery(so SortOrder) string {
+	switch so {
+	case OrderByAestheticDesc:
+		return "ORDER BY aesthetic DESC"
+	case OrderByAestheticAsc:
+		return "ORDER BY aesthetic ASC"
+	case OrderByPathDesc:
+		return "ORDER BY relative_path, sub_path DESC"
+	case OrderByPathAsc:
+		return "ORDER BY relative_path, sub_path ASC"
+	}
+	return ""
 }
