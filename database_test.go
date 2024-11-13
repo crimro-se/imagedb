@@ -17,9 +17,14 @@ func TestSQLX(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var im2 Image
-	im2.Path = "/lol"
-	_, err = db.NamedExec("insert into images (relative_path) values(:relative_path)", im2)
+	_, err = db.Exec(`insert into basedir (directory) values('/');`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	im2 := Image{BasedirID: 1, Width: 1, Height: 1, FileSize: 1, Path: "lol/dir", SubPath: "file.png"}
+	_, err = db.NamedExec(`insert into images 
+			(basedir_id, parent_path, sub_path, width, height, filesize) 
+	values(:basedir_id, :parent_path, :sub_path, :width, :height, :filesize)`, im2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,8 +41,12 @@ func TestDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	imgBest := Image{ID: 10, Path: "Best Embedding"}
-	img1 := Image{ID: 1, Path: "Worst Embedding"}
+	_, err = db.con.DB.Exec(`insert into basedir (directory) values('/');`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	imgBest := Image{ID: 10, Path: "Best Embedding", BasedirID: 1, Width: 1, Height: 1, FileSize: 1}
+	img1 := Image{ID: 1, Path: "Worst Embedding", BasedirID: 1, Width: 1, Height: 1, FileSize: 1}
 	err = db.CreateUpdateImage(&img1)
 	if err != nil {
 		t.Fatal(err)
@@ -90,4 +99,12 @@ func TestDatabase(t *testing.T) {
 	}
 
 	db.Close()
+}
+
+func TestSQLStrings(t *testing.T) {
+	im := Image{BasedirID: 1, Width: 1, Height: 1, FileSize: 1, Path: "lol/dir", SubPath: "file.png"}
+	sqlstr := mustStructToSQLString(im, []string{"rowid"})
+	if len(sqlstr) < 1 {
+		t.Fail()
+	}
 }

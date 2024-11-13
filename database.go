@@ -4,6 +4,9 @@ import (
 	"database/sql"
 	_ "embed"
 	"errors"
+	"fmt"
+	"reflect"
+	"strings"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/jmoiron/sqlx"
@@ -14,16 +17,21 @@ var dbSchema string
 
 type Image struct {
 	ID        int64           `db:"rowid"`
-	Path      string          `db:"relative_path"`
-	SubPath   sql.NullString  `db:"sub_path"`
+	BasedirID int64           `db:"basedir_id"`
+	Path      string          `db:"parent_path"`
+	SubPath   string          `db:"sub_path"`
 	Tags      sql.NullString  `db:"tags"`
 	Aesthetic sql.NullFloat64 `db:"aesthetic"`
+	Width     int64           `db:"width"`
+	Height    int64           `db:"height"`
+	FileSize  int64           `db:"filesize"`
 }
 
 type Database struct {
 	con *sqlx.DB
 }
 
+// this is an enum
 type SortOrder int
 
 const (
@@ -31,6 +39,11 @@ const (
 	OrderByPathAsc
 	OrderByAestheticDesc
 	OrderByAestheticAsc
+)
+
+var (
+	sqlImageFields     = mustStructToSQLString(Image{}, []string{})
+	sqlImageFieldsNoID = mustStructToSQLString(Image{}, []string{"rowid"})
 )
 
 // obtain a new sqlx connection.
@@ -51,6 +64,7 @@ func NewDatabase(file string, execSchema bool) (*Database, error) {
 
 // creates or updates embedding for specified Image.
 // img.ID must be correct.
+// todo: vec_quantize_float16 when it works.
 func (s *Database) CreateUpdateEmbedding(img *Image, emb []float32) error {
 	embedding, err := sqlite_vec.SerializeFloat32(emb)
 	if err != nil {
@@ -71,14 +85,10 @@ func (s *Database) CreateUpdateImage(img *Image) error {
 	var err error
 	if img.ID > 0 {
 		_, err = s.con.NamedExec(`
-		INSERT OR REPLACE INTO images 
-			   (rowid, relative_path, sub_path, tags, aesthetic) 
-		VALUES (:rowid, :relative_path, :sub_path, :tags, :aesthetic)`, img)
+		INSERT OR REPLACE INTO images `+sqlImageFields, img)
 	} else {
 		_, err = s.con.NamedExec(`
-		INSERT INTO images 
-			   (relative_path, sub_path, tags, aesthetic) 
-		VALUES (:relative_path, :sub_path, :tags, :aesthetic)`, img)
+		INSERT INTO images `+sqlImageFieldsNoID, img)
 	}
 	return err
 }
@@ -97,26 +107,23 @@ func (s *Database) ReadImages(limit, offset int, so SortOrder) ([]Image, error) 
 // Finds the image entry in the database with the given path. (exact match)
 // May return multiple results for archives if subSearch isn't specified
 // TODO: fts5 version
-func (s *Database) MatchImagesByPath(search, subSearch string, limit, offset int) ([]Image, error) {
-	if len(search) < 1 {
-		return nil, errors.New("search path shouldn't be empty")
-	}
+func (s *Database) MatchImagesByPath(parent_path, sub_path string, limit, offset int) ([]Image, error) {
 	imgs := make([]Image, 0)
 	var err error
 
-	if len(subSearch) > 0 {
+	if len(sub_path) > 0 {
 		err = s.con.Select(&imgs, `
 		SELECT rowid,* FROM images
-		WHERE relative_path = ? AND
+		WHERE parent_path = ? AND
 			sub_path = ?
-		ORDER BY relative_path, sub_path
-		LIMIT ? OFFSET ?`, search, subSearch, limit, offset)
+		`+sortOrderToQuery(OrderByPathAsc)+`
+		LIMIT ? OFFSET ?`, parent_path, sub_path, limit, offset)
 	} else {
 		err = s.con.Select(&imgs, `
 		SELECT rowid,* FROM images
-		WHERE relative_path = ? 
-		ORDER BY relative_path, sub_path
-		LIMIT ? OFFSET ?`, search, limit, offset)
+		WHERE parent_path = ? 
+		`+sortOrderToQuery(OrderByPathAsc)+`
+		LIMIT ? OFFSET ?`, parent_path, limit, offset)
 	}
 
 	return imgs, err
@@ -164,9 +171,48 @@ func sortOrderToQuery(so SortOrder) string {
 	case OrderByAestheticAsc:
 		return "ORDER BY aesthetic ASC"
 	case OrderByPathDesc:
-		return "ORDER BY relative_path, sub_path DESC"
+		return "ORDER BY parent_path, sub_path DESC"
 	case OrderByPathAsc:
-		return "ORDER BY relative_path, sub_path ASC"
+		return "ORDER BY parent_path, sub_path ASC"
 	}
 	return ""
+}
+
+// builds a string of the form "(col1, col2, ...) VALUES (:col1, :col2, ...)"
+// based on the tagged 'db' fields in the input struct
+// !panics on error
+func mustStructToSQLString(input any, ignoreFields []string) string {
+	val := reflect.ValueOf(input)
+	if val.Kind() != reflect.Struct {
+		panic(fmt.Errorf("input must be a struct"))
+	}
+
+	columns := make([]string, 0)
+	values := make([]string, 0)
+
+	// go doesn't have a Set type, so...
+	ignoreSet := make(map[string]struct{})
+	for _, field := range ignoreFields {
+		ignoreSet[field] = struct{}{}
+	}
+
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Type().Field(i)
+		dbTag, ok := field.Tag.Lookup("db")
+		if !ok || dbTag == "" {
+			continue
+		}
+		if _, ignored := ignoreSet[dbTag]; ignored {
+			continue
+		}
+
+		columns = append(columns, dbTag)
+		values = append(values, fmt.Sprintf(":%s", dbTag))
+	}
+
+	columnString := strings.Join(columns, ", ")
+	valueString := strings.Join(values, ", ")
+
+	sqlString := fmt.Sprintf("(%s) VALUES (%s)", columnString, valueString)
+	return sqlString
 }
