@@ -18,33 +18,38 @@ const (
 )
 
 // filtering criterea for retrieving images from the database
+// * ..PathStartsWith should end with a %
 type QueryFilter struct {
-	BaseDirs                   []int
-	HeightMin, HeightMax       sql.NullInt64
-	WidthMin, WidthMax         sql.NullInt64
-	FileSizeMin, FileSizeMax   sql.NullInt64
-	AestheticMin, AestheticMax sql.NullInt64
-	PathStartsWith             sql.NullString
-	SubPathStartsWith          sql.NullString
+	BaseDirs          []int           `ref:"basedir_id" db:"basedir_id_condition" clause:"in"`
+	HeightMin         sql.NullInt64   `ref:"height" db:"height_min" clause:">="`
+	HeightMax         sql.NullInt64   `ref:"height" db:"height_max" clause:"<="`
+	WidthMin          sql.NullInt64   `ref:"width" db:"width_min" clause:">="`
+	WidthMax          sql.NullInt64   `ref:"width" db:"width_max" clause:"<="`
+	FileSizeMin       sql.NullInt64   `ref:"filesize" db:"filesize_min" clause:">="`
+	FileSizeMax       sql.NullInt64   `ref:"filesize" db:"filesize_max" clause:"<="`
+	AestheticMin      sql.NullFloat64 `ref:"aesthetic" db:"aesthetic_min" clause:">="`
+	AestheticMax      sql.NullFloat64 `ref:"aesthetic" db:"aesthetic_max" clause:"<="`
+	PathStartsWith    sql.NullString
+	SubPathStartsWith sql.NullString
 }
 
 func sortOrderToQuery(so SortOrder) string {
 	switch so {
 	case OrderByAestheticDesc:
-		return "ORDER BY aesthetic DESC"
+		return " ORDER BY aesthetic DESC "
 	case OrderByAestheticAsc:
-		return "ORDER BY aesthetic ASC"
+		return " ORDER BY aesthetic ASC "
 	case OrderByPathDesc:
-		return "ORDER BY parent_path, sub_path DESC"
+		return " ORDER BY parent_path, sub_path DESC "
 	case OrderByPathAsc:
-		return "ORDER BY parent_path, sub_path ASC"
+		return " ORDER BY parent_path, sub_path ASC "
 	}
 	return ""
 }
 
 // builds a string of the form "(col1, col2, ...) VALUES (:col1, :col2, ...)"
 // based on the tagged 'db' fields in the input struct
-// !panics on error
+// panics on error
 func mustStructToSQLString(input any, ignoreFields []string) string {
 	val := reflect.ValueOf(input)
 	if val.Kind() != reflect.Struct {
