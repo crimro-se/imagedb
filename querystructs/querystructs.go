@@ -3,7 +3,9 @@ package querystructs
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 )
 
 // BuildAnnotationMap is a utility function that builds a map of [field name]=tag name
@@ -30,7 +32,7 @@ func BuildAnnotationMap(input any, tagname string) (map[string]string, error) {
 }
 
 // builds a map containing only Nullable fields from the input struct.
-func buildNullableMap(input any) (map[string]bool, error) {
+func BuildNullableMap(input any) (map[string]bool, error) {
 	val := reflect.ValueOf(input)
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
@@ -55,4 +57,90 @@ func buildNullableMap(input any) (map[string]bool, error) {
 		}
 	}
 	return nullable, nil
+}
+
+/*
+Builds a function you can use to build where clauses from structs of the same type as the one given.
+Your struct needs to use three annotation tags on relevant fields:
+
+	"ref" - name of the relevant sql column
+	"db" - a placeholder name for this condition's value itself, later used by sqlx
+	"clause" - there where condition clause, eg >=, =, IN, ...
+
+	if a type is a sql.nullable, we only add it to the query string when not null
+*/
+func BuildWhereClauseGenerator[T any](queryStructExample T) (func(T) (string, error), error) {
+	names, err := BuildAnnotationMap(queryStructExample, "db")
+	if err != nil {
+		return nil, err
+	}
+	references, err := BuildAnnotationMap(queryStructExample, "ref")
+	if err != nil {
+		return nil, err
+	}
+	if len(references) == 0 {
+		return nil, errors.New("no references in provided query")
+	}
+	clauses, err := BuildAnnotationMap(queryStructExample, "clause")
+	if err != nil {
+		return nil, err
+	}
+	nullables, err := BuildNullableMap(queryStructExample)
+	if err != nil {
+		return nil, err
+	}
+	// non-nullable parameters are appended to prefix query
+	prefixQuery := ""
+	// nullable parameters are prepared for the curried function to select from
+	prepared := make(map[string]string)
+	for fieldName, refString := range references {
+		// the db tag is used to refer to the value in this struct
+		dbtag, ok := names[fieldName]
+		_, isnullable := nullables[fieldName]
+		if !ok {
+			return nil, fmt.Errorf("missing db tag in %s", fieldName)
+		}
+		clause, ok := clauses[fieldName]
+		if !ok {
+			return nil, fmt.Errorf("missing clause tag in %s", fieldName)
+		}
+		switch strings.ToLower(clause) {
+		case "in":
+			prepared[fieldName] = fmt.Sprintf("%s IN (:%s)", refString, dbtag)
+		default:
+			prepared[fieldName] = fmt.Sprintf("%s %s :%s", refString, clause, dbtag)
+		}
+		//since the field is mandatory, we can add it to the prefix instead
+		if !isnullable {
+			if len(prefixQuery) > 0 {
+				prefixQuery += " AND "
+			}
+			prefixQuery += prepared[fieldName]
+			delete(prepared, fieldName)
+		}
+	}
+	return func(queryStruct T) (string, error) {
+		// local version of nullables
+		nullables2, err := BuildNullableMap(queryStruct)
+		suffixQuery := ""
+		if err != nil {
+			return "", err
+		}
+		for k, v := range nullables2 {
+			if v {
+				// this value is confirmed valid, so add it to query
+				if len(suffixQuery) > 0 {
+					suffixQuery += " AND "
+				}
+				suffixQuery += prepared[k]
+			}
+		}
+		// unify prefix and suffix
+		if len(prefixQuery) > 0 && len(suffixQuery) > 0 {
+			//we need an and
+			prefixQuery += " AND "
+		}
+		return prefixQuery + suffixQuery, nil
+
+	}, nil
 }

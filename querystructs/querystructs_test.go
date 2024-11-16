@@ -123,7 +123,7 @@ func TestBuildNullableMap(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		got, err := buildNullableMap(test.input)
+		got, err := BuildNullableMap(test.input)
 		if test.wantErr == nil && err != nil {
 			t.Errorf("buildNullableMap(%v): expected err: %v, got err: %v", test.input, test.wantErr, err)
 		}
@@ -132,4 +132,42 @@ func TestBuildNullableMap(t *testing.T) {
 			fmt.Println(test.input)
 		}
 	}
+}
+
+func TestBuildWhereClauseGenerator(t *testing.T) {
+	testData := struct {
+		BaseDirs          []int           `ref:"basedir_id" db:"basedir_id_condition" clause:"in"`
+		HeightMin         sql.NullInt64   `ref:"height" db:"height_min" clause:">="`
+		HeightMax         sql.NullInt64   `ref:"height" db:"height_max" clause:"<="`
+		WidthMin          sql.NullInt64   `ref:"width" db:"width_min" clause:">="`
+		WidthMax          sql.NullInt64   `ref:"width" db:"width_max" clause:"<="`
+		FileSizeMin       sql.NullInt64   `ref:"filesize" db:"filesize_min" clause:">="`
+		FileSizeMax       sql.NullInt64   `ref:"filesize" db:"filesize_max" clause:"<="`
+		AestheticMin      sql.NullFloat64 `ref:"aesthetic" db:"aesthetic_min" clause:">="`
+		AestheticMax      sql.NullFloat64 `ref:"aesthetic" db:"aesthetic_max" clause:"<="`
+		PathStartsWith    sql.NullString
+		SubPathStartsWith sql.NullString
+	}{}
+	fn, err := BuildWhereClauseGenerator(testData)
+	if err != nil {
+		t.Error(err)
+	}
+	str, err := fn(testData)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(str) <= 0 {
+		t.Fail()
+	}
+	testData.AestheticMin.Valid = true
+	testData.AestheticMin.Float64 = 7
+	str2, err := fn(testData)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(str2) <= len(str) {
+		// result should've grown due to added AestheticMin caluse.
+		t.Fail()
+	}
+	fmt.Println(str2)
 }
