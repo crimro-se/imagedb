@@ -27,12 +27,10 @@ type Image struct {
 
 type Database struct {
 	con *sqlx.DB
+	// pre-calculated variables for use in queries
+	insertIntoImageTableSQL     string
+	insertIntoImageTableSQLNoID string
 }
-
-var (
-	sqlImageFields     = mustStructToSQLString(Image{}, []string{})
-	sqlImageFieldsNoID = mustStructToSQLString(Image{}, []string{"rowid"})
-)
 
 // obtain a new sqlx connection.
 // may optionally execute the schema
@@ -47,6 +45,8 @@ func NewDatabase(file string, execSchema bool) (*Database, error) {
 	if execSchema {
 		_, err = myself.con.Exec(dbSchema)
 	}
+	myself.insertIntoImageTableSQL = mustStructToSQLString(Image{}, []string{})
+	myself.insertIntoImageTableSQLNoID = mustStructToSQLString(Image{}, []string{"rowid"})
 	return &myself, err
 }
 
@@ -73,10 +73,10 @@ func (s *Database) CreateUpdateImage(img *Image) error {
 	var err error
 	if img.ID > 0 {
 		_, err = s.con.NamedExec(`
-		INSERT OR REPLACE INTO images `+sqlImageFields, img)
+		INSERT OR REPLACE INTO images `+s.insertIntoImageTableSQL, img)
 	} else {
 		_, err = s.con.NamedExec(`
-		INSERT INTO images `+sqlImageFieldsNoID, img)
+		INSERT INTO images `+s.insertIntoImageTableSQLNoID, img)
 	}
 	return err
 }
