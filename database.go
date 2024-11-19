@@ -27,7 +27,7 @@ type Image struct {
 
 type Database struct {
 	con *sqlx.DB
-	// pre-calculated variables for use in queries
+	// pre-calculated strings for use in queries
 	insertIntoImageTableSQL     string
 	insertIntoImageTableSQLNoID string
 }
@@ -155,6 +155,6 @@ func (s *Database) MatchEmbeddings(target []float32, limit int) ([]Image, error)
 	return images, err
 }
 
-func (s *Database) Close() {
-	s.con.Close()
+func (s *Database) Close() error {
+	return s.con.Close()
 }
