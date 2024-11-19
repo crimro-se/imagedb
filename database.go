@@ -45,8 +45,14 @@ func NewDatabase(file string, execSchema bool) (*Database, error) {
 	if execSchema {
 		_, err = myself.con.Exec(dbSchema)
 	}
-	myself.insertIntoImageTableSQL = mustStructToSQLString(Image{}, []string{})
-	myself.insertIntoImageTableSQLNoID = mustStructToSQLString(Image{}, []string{"rowid"})
+	if err != nil {
+		return &myself, err
+	}
+	myself.insertIntoImageTableSQL, err = structToSQLString(Image{}, []string{})
+	if err != nil {
+		return &myself, err
+	}
+	myself.insertIntoImageTableSQLNoID, err = structToSQLString(Image{}, []string{"rowid"})
 	return &myself, err
 }
 

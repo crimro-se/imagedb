@@ -49,11 +49,10 @@ func sortOrderToQuery(so SortOrder) string {
 
 // builds a string of the form "(col1, col2, ...) VALUES (:col1, :col2, ...)"
 // based on the tagged 'db' fields in the input struct
-// panics on error
-func mustStructToSQLString(input any, ignoreFields []string) string {
+func structToSQLString(input any, ignoreFields []string) (string, error) {
 	val := reflect.ValueOf(input)
 	if val.Kind() != reflect.Struct {
-		panic(fmt.Errorf("input must be a struct"))
+		return "", fmt.Errorf("input must be a struct")
 	}
 
 	columns := make([]string, 0)
@@ -83,5 +82,5 @@ func mustStructToSQLString(input any, ignoreFields []string) string {
 	valueString := strings.Join(values, ", ")
 
 	sqlString := fmt.Sprintf("(%s) VALUES (%s)", columnString, valueString)
-	return sqlString
+	return sqlString, nil
 }

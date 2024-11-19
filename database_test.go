@@ -103,7 +103,10 @@ func TestDatabase(t *testing.T) {
 
 func TestSQLStrings(t *testing.T) {
 	im := Image{BasedirID: 1, Width: 1, Height: 1, FileSize: 1, Path: "lol/dir", SubPath: "file.png"}
-	sqlstr := mustStructToSQLString(im, []string{"rowid"})
+	sqlstr, err := structToSQLString(im, []string{"rowid"})
+	if err != nil {
+		t.Error(err)
+	}
 	if len(sqlstr) < 1 {
 		t.Fail()
 	}
