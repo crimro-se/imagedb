@@ -19,12 +19,14 @@ path - path to the real open file
 vpath - virtual path to file within an archive. empty string if we're not in an archive
 file - a file reader. will be closed after your handler function, so finish reading it before returning.
 return an error/nil.
+d - more information about the file
+threadID - a means to discern which thread is invoking the function
 
 if you wish to early abort, monitor the error channel and close the context yourself.
 
 Be advised that handlers are invoked concurrently from other threads
 */
-type FileHandler func(path, vpath string, file io.Reader, d fs.DirEntry) error
+type FileHandler func(path, vpath string, file io.Reader, d fs.DirEntry, threadID int) error
 
 type Task struct {
 	path     string
@@ -94,9 +96,10 @@ func (aw *ArchiveWalk) createWorkers(taskQueue chan Task, ctx context.Context) {
 	for i := 0; i < aw.workers; i++ {
 		aw.wg.Add(1)
 		go func() {
+
 			defer aw.wg.Done()
 			//walkerThread(taskQueue, ctx, handler, aw.errorCh, skipArchives)
-			aw.work(taskQueue, ctx, aw.handler)
+			aw.work(taskQueue, ctx, aw.handler, i)
 		}()
 	}
 }
@@ -107,7 +110,7 @@ func (aw *ArchiveWalk) createWorkers(taskQueue chan Task, ctx context.Context) {
 // can be terminated via ctx or closing the taskCh.
 // errors are sent to errorCh if it was set in constructor
 // zip & rar handling can optionally be skipped.
-func (aw *ArchiveWalk) work(taskCh <-chan Task, ctx context.Context, fn FileHandler) {
+func (aw *ArchiveWalk) work(taskCh <-chan Task, ctx context.Context, fn FileHandler, threadID int) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -120,12 +123,12 @@ func (aw *ArchiveWalk) work(taskCh <-chan Task, ctx context.Context, fn FileHand
 			// walk archives
 			ext := getExt(task.dirEntry.Name())
 			if aw.openRar && ext == "rar" {
-				err := rarWalk(task, fn, ctx)
+				err := rarWalk(task, fn, ctx, threadID)
 				notifyIfError(aw.errorCh, err)
 				break
 			}
 			if aw.openZip && ext == "zip" {
-				err := zipWalk(task, fn, ctx)
+				err := zipWalk(task, fn, ctx, threadID)
 				notifyIfError(aw.errorCh, err)
 				break
 			}
@@ -136,7 +139,7 @@ func (aw *ArchiveWalk) work(taskCh <-chan Task, ctx context.Context, fn FileHand
 				notifyIfError(aw.errorCh, err)
 			} else {
 				defer f.Close()
-				fn(task.path, "", f, task.dirEntry)
+				fn(task.path, "", f, task.dirEntry, threadID)
 			}
 		}
 	}
@@ -144,7 +147,7 @@ func (aw *ArchiveWalk) work(taskCh <-chan Task, ctx context.Context, fn FileHand
 
 // walks .zip archives
 // todo: file crc check?
-func zipWalk(task Task, fh FileHandler, ctx context.Context) error {
+func zipWalk(task Task, fh FileHandler, ctx context.Context, threadID int) error {
 	r, err := zip.OpenReader(task.path)
 	if err != nil {
 		return err
@@ -161,7 +164,7 @@ func zipWalk(task Task, fh FileHandler, ctx context.Context) error {
 		fileHandle, err := f.Open()
 		if err == nil {
 			defer fileHandle.Close()
-			fh(task.path, f.Name, fileHandle, task.dirEntry)
+			fh(task.path, f.Name, fileHandle, task.dirEntry, threadID)
 		} else {
 			return err
 		}
@@ -170,7 +173,7 @@ func zipWalk(task Task, fh FileHandler, ctx context.Context) error {
 }
 
 // walks .rar archives
-func rarWalk(task Task, fh FileHandler, ctx context.Context) error {
+func rarWalk(task Task, fh FileHandler, ctx context.Context, threadID int) error {
 	r, err := rardecode.OpenReader(task.path)
 	if err != nil {
 		return err
@@ -191,7 +194,7 @@ func rarWalk(task Task, fh FileHandler, ctx context.Context) error {
 			if header.IsDir {
 				continue
 			}
-			fh(task.path, header.Name, r, task.dirEntry)
+			fh(task.path, header.Name, r, task.dirEntry, threadID)
 		}
 	}
 

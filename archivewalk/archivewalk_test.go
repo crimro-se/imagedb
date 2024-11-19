@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-var dummyHandler = func(path, vpath string, file io.Reader, d fs.DirEntry) error { return nil }
+var dummyHandler = func(path, vpath string, file io.Reader, d fs.DirEntry, threadID int) error { return nil }
 
 /*
 - Ensures the basic operation of archive walking seems to work
@@ -28,7 +28,7 @@ func Test_archivewalk(t *testing.T) {
 	}()
 
 	// checks for no errors and correct number of images read
-	aw := NewArchiveWalker(10, errCh, true, true, func(path, vpath string, file io.Reader, d fs.DirEntry) error {
+	aw := NewArchiveWalker(10, errCh, true, true, func(path, vpath string, file io.Reader, d fs.DirEntry, threadID int) error {
 		files++
 		return nil
 	})

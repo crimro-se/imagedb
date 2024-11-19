@@ -37,7 +37,7 @@ func embeddingWorker() {}
 
 // callback function for archivewalk,
 // loads and resizes images, sends data to a channel for further processing afterwards.
-func imagehandler(path, vpath string, file io.Reader, d fs.DirEntry) error {
+func imagehandler(path, vpath string, file io.Reader, d fs.DirEntry, threadID int) error {
 	ext := ""
 	if len(vpath) > 0 {
 		ext = getExt(vpath)
