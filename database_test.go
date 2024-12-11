@@ -83,7 +83,7 @@ func TestDatabase(t *testing.T) {
 		t.Errorf("Expected img1 ID to be 1, got %d", img1.ID)
 	}
 	if imgBest.ID != 10 {
-		t.Errorf("Expected imgBest ID to be 2, got %d", imgBest.ID)
+		t.Errorf("Expected imgBest ID to be 10, got %d", imgBest.ID)
 	}
 
 	emb := make([]float32, 768)
