@@ -46,11 +46,16 @@ func TestDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	imgBest := Image{ID: 10, Path: "Best Embedding", BasedirID: 1, Width: 1, Height: 1, FileSize: 1}
-	img1 := Image{ID: 1, Path: "Worst Embedding", BasedirID: 1, Width: 1, Height: 1, FileSize: 1}
-	err = db.CreateUpdateImage(&img1)
+	// nb: id 0 should be changed by the insert function.
+	img1 := Image{ID: 0, Path: "Worst Embedding", BasedirID: 1, Width: 1, Height: 1, FileSize: 1}
+
+	// Capture the ID returned by CreateUpdateImage
+	id1, err := db.CreateUpdateImage(&img1)
 	if err != nil {
 		t.Fatal(err)
 	}
+	img1.ID = id1 // Update img1 with the returned ID
+
 	tst, err := db.MatchImagesByPath("Worst Embedding", "", 3, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -58,16 +63,27 @@ func TestDatabase(t *testing.T) {
 	if len(tst) != 1 {
 		t.Fail()
 	}
-	err = db.CreateUpdateImage(&imgBest)
+
+	idBest, err := db.CreateUpdateImage(&imgBest)
 	if err != nil {
 		t.Fatal(err)
 	}
+	imgBest.ID = idBest // Update imgBest with the returned ID
+
 	imgs, err := db.ReadImages(3, 0, OrderByPathDesc)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(imgs) != 2 {
 		t.Fail()
+	}
+
+	// Additional checks to ensure the IDs are correct
+	if img1.ID != 1 {
+		t.Errorf("Expected img1 ID to be 1, got %d", img1.ID)
+	}
+	if imgBest.ID != 10 {
+		t.Errorf("Expected imgBest ID to be 2, got %d", imgBest.ID)
 	}
 
 	emb := make([]float32, 768)

@@ -72,19 +72,28 @@ func (s *Database) CreateUpdateEmbedding(img *Image, emb []float32) error {
 }
 
 // Creates or updates an img in the database.
-// if image.ID is 0 it'll be automatically set.
-// (this is fine as sqlite rowids start at 1)
-// TODO: api change, consider returning the ID chosen by the database.
-func (s *Database) CreateUpdateImage(img *Image) error {
+// If image.ID is 0, it'll be automatically set.
+// (this is fine as SQLite rowids start at 1)
+// Returns the ID of the image chosen by the database.
+func (s *Database) CreateUpdateImage(img *Image) (int64, error) {
 	var err error
 	if img.ID > 0 {
 		_, err = s.con.NamedExec(`
-		INSERT OR REPLACE INTO images `+s.insertIntoImageTableSQL, img)
+			INSERT OR REPLACE INTO images `+s.insertIntoImageTableSQL, img)
+		return img.ID, err
 	} else {
-		_, err = s.con.NamedExec(`
-		INSERT INTO images `+s.insertIntoImageTableSQLNoID, img)
+		result, err := s.con.NamedExec(`
+			INSERT INTO images `+s.insertIntoImageTableSQLNoID, img)
+		if err != nil {
+			return 0, err
+		}
+		id, err := result.LastInsertId()
+		if err != nil {
+			return 0, err
+		}
+		img.ID = int64(id)
+		return id, nil
 	}
-	return err
 }
 
 // returns some images from the db, sorted by path
