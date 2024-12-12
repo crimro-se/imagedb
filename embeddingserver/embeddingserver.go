@@ -27,6 +27,10 @@ type Client struct {
 	ServerURL string // URL of the server endpoint
 }
 
+type QueueSizeResponse struct {
+	Q int `json:"q"`
+}
+
 // New creates a new instance of Client.
 func New(serverURL string) *Client {
 	return &Client{
@@ -94,6 +98,28 @@ func (c *Client) CollectResults(results Embeddings) (Embeddings, error) {
 		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 	return results, nil
+}
+
+// GetQueueSize returns the number of images in the process queue on the server.
+func (c *Client) GetQueueSize() (int, error) {
+	resp, err := http.Get(c.ServerURL + "/q")
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, err
+	}
+
+	var queueSizeResponse QueueSizeResponse
+	err = json.Unmarshal(body, &queueSizeResponse)
+	if err != nil {
+		return 0, err
+	}
+
+	return queueSizeResponse.Q, nil
 }
 
 // submitTasks sends tasks to the server for processing.

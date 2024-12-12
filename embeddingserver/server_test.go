@@ -116,8 +116,12 @@ func TestEmbServer(t *testing.T) {
 	if err != nil {
 		log.Fatalf("failed to submit image task: %v", err)
 	}
+	_, err = client.GetQueueSize()
+	if err != nil {
+		log.Fatalf("failed to get queue size: %v", err)
+	}
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 	var results = make(Embeddings, 0)
 	results["xd"] = struct {
 		Embedding [768]float32 "json:\"embedding\""
