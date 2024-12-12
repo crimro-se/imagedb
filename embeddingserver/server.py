@@ -88,8 +88,6 @@ def normalized_pt(a: torch.Tensor, axis: int = -1, order: int = 2) -> torch.Tens
     return a / norms
 
 
-
-
 def process_tasks(task_queue, results):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14",
@@ -113,8 +111,7 @@ def process_tasks(task_queue, results):
             break # Stop signal
         batch.append(task)
         # now we fill up the batch as much as possible
-        if not get_additional_tasks(batch, task_queue):
-            break
+        get_additional_tasks(batch, task_queue)
 
         img_batch, txt_batch = [],[]
         images, texts = [],[]
@@ -148,12 +145,14 @@ def get_additional_tasks(batch, q):
     try: 
         while len(batch) < BATCH_SIZE:
             task = q.get_nowait()
-            if task is None: 
-                return False
-            batch.append(task)
+            if task is None: # let someone else handle it
+                q.put(None)
+                return
+            else:
+                batch.append(task)
     except Empty:
-        return True
-    return True
+        return
+    return
 
 if __name__ == '__main__':
     mp.set_start_method('spawn')
@@ -200,6 +199,10 @@ if __name__ == '__main__':
         
         return jsonify({'message': f'{len(data)} tasks submitted successfully', 
                         'ids': task_ids, 'accepted_all': len(data) == len(task_ids)}), 202
+
+    @app.route('/q', methods=['GET'])
+    def qsize():
+        return jsonify({"q": task_queue.qsize()})
 
     @app.route('/results', methods=['GET'])
     def results_endpoint():
