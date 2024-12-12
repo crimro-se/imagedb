@@ -152,7 +152,8 @@ func (c *Client) submitTasks(payload []Task) error {
 	if err != nil {
 		return fmt.Errorf("failed to decode server response: %w", err)
 	}
-	fmt.Printf("Task submitted successfully with result: %+v\n", result)
+
+	//fmt.Printf("Task submitted successfully with result: %+v\n", result)
 
 	return nil
 }
