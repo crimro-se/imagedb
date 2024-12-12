@@ -2,9 +2,11 @@
 package imageutil
 
 import (
+	"bytes"
 	"image"
 	"image/color"
 	"image/draw"
+	"image/png"
 	"math"
 
 	"github.com/crimro-se/imagedb/stbresize"
@@ -74,4 +76,13 @@ func CalculateNewSize(imgB image.Rectangle, maxDim int) image.Rectangle {
 		Min: minPt,
 		Max: maxPt,
 	}
+}
+
+func ImageToPNG(img image.Image) ([]byte, error) {
+	var buf bytes.Buffer
+	err := png.Encode(&buf, img)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
