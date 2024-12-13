@@ -56,7 +56,7 @@ func TestDatabase(t *testing.T) {
 	}
 	img1.ID = id1 // Update img1 with the returned ID
 
-	tst, err := db.MatchImagesByPath("Worst Embedding", "", 3, 0)
+	tst, err := db.MatchImagesByPath("Worst Embedding", "", 1, 3, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

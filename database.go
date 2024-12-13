@@ -117,7 +117,7 @@ func (s *Database) ReadImages(limit, offset int, so SortOrder) ([]Image, error) 
 // Finds the image entry in the database with the given path. (exact match)
 // May return multiple results for archives if subSearch isn't specified
 // TODO: fts5 version
-func (s *Database) MatchImagesByPath(parent_path, sub_path string, limit, offset int) ([]Image, error) {
+func (s *Database) MatchImagesByPath(parent_path, sub_path string, basedirID int64, limit, offset int) ([]Image, error) {
 	imgs := make([]Image, 0)
 	var err error
 
@@ -125,15 +125,17 @@ func (s *Database) MatchImagesByPath(parent_path, sub_path string, limit, offset
 		err = s.con.Select(&imgs, `
 		SELECT rowid,* FROM images
 		WHERE parent_path = ? AND
-			sub_path = ?
+			sub_path = ? AND
+			basedir_id = ?
 		`+sortOrderToQuery(OrderByPathAsc)+`
-		LIMIT ? OFFSET ?`, parent_path, sub_path, limit, offset)
+		LIMIT ? OFFSET ?`, parent_path, sub_path, basedirID, limit, offset)
 	} else {
 		err = s.con.Select(&imgs, `
 		SELECT rowid,* FROM images
-		WHERE parent_path = ? 
+		WHERE parent_path = ? AND
+			basedir_id = ?
 		`+sortOrderToQuery(OrderByPathAsc)+`
-		LIMIT ? OFFSET ?`, parent_path, limit, offset)
+		LIMIT ? OFFSET ?`, parent_path, basedirID, limit, offset)
 	}
 
 	return imgs, err

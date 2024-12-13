@@ -27,12 +27,12 @@ const APISERVER = "http://localhost:5000"
 // handles digesting images into the database &  embedding server
 type ImageProcessor struct {
 	dbConnections         *threadboundresourcepool.ThreadResource[*Database] // per-thread db connection pool
-	basedir_id            int                                                // foreign key to use for all images we add to the db
+	basedir_id            int64                                              // foreign key to use for all images we add to the db
 	embeddingQueueChecker *safeperiodicchecker.Checker[int]                  // we track the servers queue size to pace our requests
 	apiServer             *embeddingserver.Client
 }
 
-func NewImageProcessor(dbfile string, basedir_id int) (*ImageProcessor, error) {
+func NewImageProcessor(dbfile string, basedir_id int64) (*ImageProcessor, error) {
 	if len(dbfile) < 1 {
 		return nil, fmt.Errorf("database filename can't be empty")
 	}
@@ -88,9 +88,22 @@ func (p *ImageProcessor) Handler(path, vpath string, file io.Reader, d fs.DirEnt
 
 	db := p.dbConnections.GetResource(threadID)
 
+	parentDir, fileName := p.archiveWalkerPathToDatabasePath(path, vpath)
+
+	// skip if already in DB
+	// todo: skip existing as a configuration option rather than presumption
+	matchedImage, err := db.MatchImagesByPath(parentDir, fileName, p.basedir_id, 1, 0)
+	if err != nil {
+		return err
+	}
+	if len(matchedImage) > 0 {
+		if matchedImage[0].Aesthetic.Valid {
+			return nil
+		}
+	}
+
 	//todo: support all image formats trivially possible.
 	var img image.Image
-	var err error
 	switch ext {
 	case "jpg":
 		img, err = jpeg.Decode(file)
@@ -111,9 +124,12 @@ func (p *ImageProcessor) Handler(path, vpath string, file io.Reader, d fs.DirEnt
 		Height:    int64(img.Bounds().Dy()),
 		BasedirID: int64(p.basedir_id),
 	}
-	parentDir, fileName := p.archiveWalkerPathToDatabasePath(path, vpath)
 	dbImg.Path = parentDir
 	dbImg.SubPath = fileName
+	// if it's already in the database then this is an update
+	if len(matchedImage) == 1 {
+		dbImg.ID = matchedImage[0].ID
+	}
 	id, err := db.CreateUpdateImage(&dbImg)
 	if err != nil {
 		return fmt.Errorf("error adding image to database: %s:%s: %w", path, vpath, err)
