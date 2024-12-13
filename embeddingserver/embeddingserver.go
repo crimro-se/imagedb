@@ -12,8 +12,8 @@ import (
 // a map (keyed by id string) of embedding results
 // text embeddings always have an aesthetic of 0, for now.
 type Embeddings map[string]struct {
-	Embedding [768]float32 `json:"embedding"`
-	Aesthetic float32      `json:"aesthetic"`
+	Embedding []float32 `json:"embedding"`
+	Aesthetic float32   `json:"aesthetic"`
 }
 
 type Task struct {
@@ -81,7 +81,8 @@ func (c *Client) SubmitTextTask(id string, text string) error {
 }
 
 // CollectResults collects the results from the server.
-func (c *Client) CollectResults(results Embeddings) (Embeddings, error) {
+func (c *Client) CollectResults() (Embeddings, error) {
+	results := make(Embeddings, 0)
 	resp, err := http.Get(c.ServerURL + "/results")
 	if err != nil {
 		return nil, fmt.Errorf("failed to collect results: %w", err)

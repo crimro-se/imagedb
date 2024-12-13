@@ -33,9 +33,11 @@ func main() {
 		return
 	}
 
+	ip.RunResultsProcessor(ctx, errCh)
+
 	aw := archivewalk.NewArchiveWalker(10, errCh, true, true, ip.Handler)
 	aw.Walk("test_data/valid", ctx)
-	time.Sleep(1 * time.Second)
+	time.Sleep(5000 * time.Millisecond)
 }
 
 // returns the file extension in lower-case.

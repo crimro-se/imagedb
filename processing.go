@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -20,7 +21,7 @@ import (
 
 const MAXIMAGESIZE = 512
 const MAXQUEUESIZE = 96
-const COOLDOWN = 300 * time.Millisecond
+const COOLDOWN = 250 * time.Millisecond
 const APISERVER = "http://localhost:5000"
 
 // handles digesting images into the database &  embedding server
@@ -135,4 +136,43 @@ func (p *ImageProcessor) Handler(path, vpath string, file io.Reader, d fs.DirEnt
 	err = p.apiServer.SubmitImageTask(strconv.FormatInt(id, 10), imgBytes)
 
 	return err
+}
+
+// creates and runs a new thread to collect results from the embedding server
+func (p *ImageProcessor) RunResultsProcessor(ctx context.Context, errorCh chan<- error) {
+	db := p.dbConnections.GetResource(-1)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			results, err := p.apiServer.CollectResults()
+			if err != nil {
+				errorCh <- err
+				time.Sleep(COOLDOWN)
+				continue
+			}
+			if len(results) > 0 {
+				// we actually have something to do.
+				for k, v := range results {
+					i, err := strconv.ParseInt(k, 10, 64)
+					if err != nil {
+						errorCh <- fmt.Errorf("error in EmbeddingResultsProcessor converting string to int64: %w", err)
+						return // this shouldn't happen, so just stop the thread if it does happen.
+					}
+					err = db.CreateUpdateEmbedding(i, v.Embedding)
+					if err != nil {
+						errorCh <- err
+					}
+					err = db.UpdateAesthetic(i, v.Aesthetic)
+					if err != nil {
+						errorCh <- err
+					}
+				}
+			}
+			time.Sleep(COOLDOWN)
+		}
+	}()
 }

@@ -90,7 +90,7 @@ func TestDatabase(t *testing.T) {
 	emb[0] = 1
 	emb[1] = 1
 	emb[3] = 2
-	err = db.CreateUpdateEmbedding(&imgBest, emb)
+	err = db.CreateUpdateEmbedding(imgBest.ID, emb)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestDatabase(t *testing.T) {
 	emb[0] = 1
 	emb[1] = 1
 	emb[3] = 1
-	err = db.CreateUpdateEmbedding(&img1, emb)
+	err = db.CreateUpdateEmbedding(img1.ID, emb)
 	if err != nil {
 		t.Fatal(err)
 	}

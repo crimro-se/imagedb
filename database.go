@@ -59,7 +59,7 @@ func NewDatabase(file string, execSchema bool) (*Database, error) {
 // creates or updates embedding for specified Image.
 // img.ID must be correct.
 // todo: vec_quantize_float16 when it works.
-func (s *Database) CreateUpdateEmbedding(img *Image, emb []float32) error {
+func (s *Database) CreateUpdateEmbedding(imgID int64, emb []float32) error {
 	embedding, err := sqlite_vec.SerializeFloat32(emb)
 	if err != nil {
 		return err
@@ -67,7 +67,14 @@ func (s *Database) CreateUpdateEmbedding(img *Image, emb []float32) error {
 	_, err = s.con.Exec(`
 	INSERT OR REPLACE INTO embeddings 
 		   (rowid, embedding) 
-	VALUES (?, ?)`, img.ID, embedding)
+	VALUES (?, ?)`, imgID, embedding)
+	return err
+}
+
+func (s *Database) UpdateAesthetic(imgID int64, aesthetic float32) error {
+	_, err := s.con.Exec(`
+	UPDATE images SET aesthetic = ?
+	WHERE rowid = ?`, aesthetic, imgID)
 	return err
 }
 
