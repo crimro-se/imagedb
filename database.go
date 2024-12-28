@@ -13,6 +13,11 @@ import (
 //go:embed schema.sql
 var dbSchema string
 
+type Basedir struct {
+	ID        int64  `db:"rowid"`
+	Directory string `db:"directory"`
+}
+
 type Image struct {
 	ID        int64           `db:"rowid"`
 	BasedirID int64           `db:"basedir_id"`
@@ -54,6 +59,20 @@ func NewDatabase(file string, execSchema bool) (*Database, error) {
 	}
 	myself.insertIntoImageTableSQLNoID, err = structToSQLString(Image{}, []string{"rowid"})
 	return &myself, err
+}
+
+func (s *Database) CreateBasedir(directory string) error {
+	_, err := s.con.Exec(`
+	INSERT INTO basedir 
+		   (directory) 
+	VALUES (?)`, directory)
+	return err
+}
+
+func (s *Database) GetAllBasedir() ([]Basedir, error) {
+	based := make([]Basedir, 0)
+	err := s.con.Select(&based, `SELECT rowid,* FROM basedir`)
+	return based, err
 }
 
 // creates or updates embedding for specified Image.

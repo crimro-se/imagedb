@@ -41,7 +41,7 @@ func TestDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.con.DB.Exec(`insert into basedir (directory) values('/');`)
+	err = db.CreateBasedir("/")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,6 @@
 -- uses 'rowid' innate primary key.
 CREATE TABLE IF NOT EXISTS basedir (
-  directory TEXT                  -- a location the user has decided to index
+  directory TEXT NOT NULL                 -- a location the user has decided to index
 );
 CREATE UNIQUE INDEX IF NOT EXISTS basedir_path_idx ON basedir(directory);
 
@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS images (
 );
 CREATE INDEX IF NOT EXISTS images_basedir_id_idx ON images(basedir_id);
 CREATE INDEX IF NOT EXISTS images_aesthetic_idx ON images(aesthetic);
-CREATE UNIQUE INDEX IF NOT EXISTS images_path_idx ON images(parent_path, sub_path);
+CREATE UNIQUE INDEX IF NOT EXISTS images_path_uq ON images(basedir_id, parent_path, sub_path);
+CREATE UNIQUE INDEX IF NOT EXISTS basedir_directory_uq ON basedir(directory);
 -- TODO: CreatedAt?
 
 
