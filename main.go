@@ -1,5 +1,8 @@
 package main
 
+import "strings"
+
+/*
 import (
 	"context"
 	"fmt"
@@ -8,6 +11,7 @@ import (
 
 	archivewalk "github.com/crimro-se/imagedb/archivewalk"
 )
+
 
 func main() {
 	ctx := context.Background()
@@ -39,6 +43,8 @@ func main() {
 	aw.Walk("test_data/valid", ctx)
 	time.Sleep(5000 * time.Millisecond)
 }
+
+*/
 
 // returns the file extension in lower-case.
 // todo: special case for .tar.xz etc maybe.

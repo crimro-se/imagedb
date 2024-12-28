@@ -42,7 +42,7 @@ type ArchiveWalk struct {
 }
 
 // creates a new archive walker with certain settings.
-func NewArchiveWalker(workers int, errorCh chan error, openZip bool, openRar bool, handler FileHandler) ArchiveWalk {
+func NewArchiveWalker(workers int, errorCh chan error, openZip bool, openRar bool, handler FileHandler) *ArchiveWalk {
 	var aw ArchiveWalk
 	aw.handler = handler
 	aw.workers = workers
@@ -50,7 +50,7 @@ func NewArchiveWalker(workers int, errorCh chan error, openZip bool, openRar boo
 	aw.openZip = openZip
 	aw.openRar = openRar
 	aw.wg = &sync.WaitGroup{}
-	return aw
+	return &aw
 }
 
 // walks all files from specified root, including entering supported archives.
