@@ -43,28 +43,20 @@ type ImagePayload struct {
 	Id    string `json:"id"`
 }
 
-func TestSendBase64Image(t *testing.T) {
-	// Create JSON payload
-	payload := []ImagePayload{{
+func TestSendBase64SingleImage(t *testing.T) {
+	payload := ImagePayload{
 		Image: testimg_b64,
 		Id:    "example_image",
-	}, {
-		Image: testimg_b64,
-		Id:    "example_image2",
-	}, {
-		Image: testimg_b64,
-	}, {
-		Image: testimg_b64,
-	}, {
-		Image: testimg_b64,
-	}, {
-		Image: testimg_b64,
-	}, {
-		Image: testimg_b64,
-	}, {
-		Image: testimg_b64,
-	}}
+	}
 
+	payload2 := ImagePayload{
+		Image: testimg_b64,
+	}
+	SendBase64SingleImage(t, payload)
+	SendBase64SingleImage(t, payload2)
+}
+
+func SendBase64SingleImage(t *testing.T, payload ImagePayload) {
 	// Marshal payload to JSON
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
@@ -73,7 +65,7 @@ func TestSendBase64Image(t *testing.T) {
 	}
 
 	// Setup the request
-	url := "http://localhost:5000/process"
+	url := "http://localhost:5000/predict"
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		t.Errorf("Failed to create request: %v", err)
@@ -107,24 +99,23 @@ func TestSendBase64Image(t *testing.T) {
 }
 
 func TestEmbServer(t *testing.T) {
-	client := New("http://localhost:5000")
-	img, err := base64.StdEncoding.DecodeString(testimg_b64)
-	if err != nil {
-		t.Error(err)
+	client := NewClient("http://localhost:5000")
+
+	payload := Task{
+		Image: testimg_b64,
+		Id:    "example_image",
 	}
-	err = client.SubmitImageTask("test", img)
+
+	emb, err := client.GetEmbedding(payload)
 	if err != nil {
 		log.Fatalf("failed to submit image task: %v", err)
 	}
-	_, err = client.GetQueueSize()
-	if err != nil {
-		log.Fatalf("failed to get queue size: %v", err)
+	if emb.Aesthetic == 0 {
+		t.Errorf("Aesthetic unexpectedly 0")
+	}
+	if len(emb.Embedding) < 1 {
+		t.Errorf("Embedding len unexpectedly < 1")
 	}
 
 	time.Sleep(2 * time.Second)
-
-	_, err = client.CollectResults()
-	if err != nil {
-		t.Error(err)
-	}
 }
