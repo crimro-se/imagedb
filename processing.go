@@ -94,6 +94,7 @@ func (p *ImageProcessor) Handler(path, vpath string, file io.Reader, d fs.DirEnt
 
 	// skip if already in DB
 	// todo: skip existing as a configuration option rather than presumption
+	// todo: debug this
 	matchedImage, err := db.MatchImagesByPath(parentDir, fileName, p.basedir.ID, 1, 0)
 	if err != nil {
 		return err
