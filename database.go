@@ -8,6 +8,7 @@ import (
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/jmoiron/sqlx"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 //go:embed schema.sql
@@ -73,6 +74,25 @@ func (s *Database) GetAllBasedir() ([]Basedir, error) {
 	based := make([]Basedir, 0)
 	err := s.con.Select(&based, `SELECT rowid,* FROM basedir`)
 	return based, err
+}
+
+func (s *Database) DeleteBasedir(id int64) error {
+	_, err1 := s.con.Exec(`DELETE FROM basedir WHERE rowid = ?`, id)
+	err2 := s.DeleteImagesByBasedirID(id)
+	return errors.Join(err1, err2)
+}
+
+// removes images and associated embeddings by basedir_id
+func (s *Database) DeleteImagesByBasedirID(id int64) error {
+	_, err1 := s.con.Exec(`
+	DELETE FROM embeddings 
+	WHERE rowid IN 
+		(SELECT rowid FROM images WHERE basedir_id = ?)`, id)
+
+	_, err2 := s.con.Exec(`
+	DELETE FROM images 
+		WHERE images.basedir_id = ?`, id)
+	return errors.Join(err1, err2)
 }
 
 // creates or updates embedding for specified Image.
