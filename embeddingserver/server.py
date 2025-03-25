@@ -146,5 +146,5 @@ class ClipLitAPI(ls.LitAPI):
 
 if __name__ == "__main__":
     api = ClipLitAPI()
-    server = ls.LitServer(api, accelerator="cuda", devices=1, max_batch_size=BATCH_SIZE)
+    server = ls.LitServer(api, accelerator="cuda", devices=1, max_batch_size=BATCH_SIZE, workers_per_device=4)
     server.run(port=5000)
