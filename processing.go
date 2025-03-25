@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -9,12 +8,11 @@ import (
 	"io"
 	"io/fs"
 	"path/filepath"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/crimro-se/imagedb/embeddingserver"
 	"github.com/crimro-se/imagedb/imageutil"
-	"github.com/crimro-se/imagedb/safeperiodicchecker"
 	"github.com/crimro-se/imagedb/threadboundresourcepool"
 	"golang.org/x/image/webp"
 )
@@ -26,18 +24,17 @@ const APISERVER = "http://localhost:5000"
 
 // handles digesting images into the database &  embedding server
 type ImageProcessor struct {
-	dbConnections         *threadboundresourcepool.ThreadResource[*Database] // per-thread db connection pool
-	basedir_id            int64                                              // foreign key to use for all images we add to the db
-	embeddingQueueChecker *safeperiodicchecker.Checker[int]                  // we track the servers queue size to pace our requests
-	apiServer             *embeddingserver.Client
+	dbConnections *threadboundresourcepool.ThreadResource[*Database] // per-thread db connection pool
+	basedir       Basedir                                            // foreign key to use for all images we add to the db
+	apiServer     *embeddingserver.Client
 }
 
-func NewImageProcessor(dbfile string, basedir_id int64) (*ImageProcessor, error) {
+func NewImageProcessor(dbfile string, basedir Basedir) (*ImageProcessor, error) {
 	if len(dbfile) < 1 {
 		return nil, fmt.Errorf("database filename can't be empty")
 	}
 	processor := ImageProcessor{
-		basedir_id: basedir_id,
+		basedir: basedir,
 		dbConnections: threadboundresourcepool.New(
 			// a function that can create new db connections
 			func() *Database {
@@ -48,39 +45,44 @@ func NewImageProcessor(dbfile string, basedir_id int64) (*ImageProcessor, error)
 				}
 				return db
 			}),
-		apiServer: embeddingserver.New(APISERVER),
+		apiServer: embeddingserver.NewClient(APISERVER),
 	}
-	processor.embeddingQueueChecker = safeperiodicchecker.New(
-		// function to return the current queue size
-		func() int {
-			q, err := processor.apiServer.GetQueueSize()
-			if err != nil {
-				panic(err) // TODO: send ciritcal err to GUI
-			}
-			return q
-		}, COOLDOWN)
 	return &processor, nil
 }
 
-// translate archive walker path division into one compatible with the database.
+// Translate archive walker path division into one compatible with the database.
+// The archive walker form is a path to a file, and a virtual path for files within compressed archives.
+// The database form is parent directory OR archive, and a filename/path.
+// Additionally, we need to account for basedir
 func (p *ImageProcessor) archiveWalkerPathToDatabasePath(path, vpath string) (string, string) {
 	NoVpath := len(vpath) == 0
 	var dir, file string
+
+	// remove basedir prefix from path
+	if strings.HasPrefix(path, p.basedir.Directory) {
+		path = path[len(p.basedir.Directory):]
+	} else {
+		panic("path isn't prefixed by the basedir")
+	}
+
+	// path is definitely an image file
 	if NoVpath {
 		dir, file = filepath.Split(path)
 		dir = filepath.Clean(dir)
 		return dir, file
 	}
 
+	// path is an archive
 	return filepath.Clean(path), vpath
 
 }
 
 // This is a callback function for archivewalk,
-// loads and resizes images, sends data to a channel for further processing afterwards.
+// loads and resizes images, then waits for
 func (p *ImageProcessor) Handler(path, vpath string, file io.Reader, d fs.DirEntry, threadID int) error {
 	var ext string
-	if len(vpath) > 0 {
+	vpath_exists := (len(vpath) > 0)
+	if vpath_exists {
 		ext = getExt(vpath)
 	} else {
 		ext = getExt(path)
@@ -92,7 +94,7 @@ func (p *ImageProcessor) Handler(path, vpath string, file io.Reader, d fs.DirEnt
 
 	// skip if already in DB
 	// todo: skip existing as a configuration option rather than presumption
-	matchedImage, err := db.MatchImagesByPath(parentDir, fileName, p.basedir_id, 1, 0)
+	matchedImage, err := db.MatchImagesByPath(parentDir, fileName, p.basedir.ID, 1, 0)
 	if err != nil {
 		return err
 	}
@@ -118,11 +120,10 @@ func (p *ImageProcessor) Handler(path, vpath string, file io.Reader, d fs.DirEnt
 		return fmt.Errorf("error while loading image file: %s:%s: %w", path, vpath, err)
 	}
 
-	//incomplete
 	dbImg := Image{
 		Width:     int64(img.Bounds().Dx()),
 		Height:    int64(img.Bounds().Dy()),
-		BasedirID: int64(p.basedir_id),
+		BasedirID: int64(p.basedir.ID),
 	}
 	dbImg.Path = parentDir
 	dbImg.SubPath = fileName
@@ -130,12 +131,8 @@ func (p *ImageProcessor) Handler(path, vpath string, file io.Reader, d fs.DirEnt
 	if len(matchedImage) == 1 {
 		dbImg.ID = matchedImage[0].ID
 	}
-	id, err := db.CreateUpdateImage(&dbImg)
-	if err != nil {
-		return fmt.Errorf("error adding image to database: %s:%s: %w", path, vpath, err)
-	}
-	dbImg.ID = id
-	//imageutil.ScaleImagePaddedSquareRGBA(img, color.RGBA{255, 255, 255, 255}, 256)
+
+	// get embeddings
 	if max(dbImg.Width, dbImg.Height) > MAXIMAGESIZE {
 		img = imageutil.ScaleImageRGBA(img, MAXIMAGESIZE)
 	}
@@ -143,52 +140,20 @@ func (p *ImageProcessor) Handler(path, vpath string, file io.Reader, d fs.DirEnt
 	if err != nil {
 		return fmt.Errorf("error converting image to png: %s:%s: %w", path, vpath, err)
 	}
-	img = nil
 
-	// stall & sleep if the queue is large
-	for queueState := p.embeddingQueueChecker.Call(); queueState > MAXQUEUESIZE; {
-		time.Sleep(COOLDOWN)
+	emb, err := p.apiServer.GetImageEmbedding(imgBytes)
+	if err != nil {
+		return err
 	}
-	err = p.apiServer.SubmitImageTask(strconv.FormatInt(id, 10), imgBytes)
-
-	return err
-}
-
-// creates and runs a new thread to collect results from the embedding server
-func (p *ImageProcessor) RunResultsProcessor(ctx context.Context, errorCh chan<- error) {
-	db := p.dbConnections.GetResource(-1)
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			results, err := p.apiServer.CollectResults()
-			if err != nil {
-				errorCh <- err
-				time.Sleep(COOLDOWN)
-				continue
-			}
-			if len(results) > 0 {
-				// we actually have something to do.
-				for k, v := range results {
-					i, err := strconv.ParseInt(k, 10, 64)
-					if err != nil {
-						errorCh <- fmt.Errorf("error in EmbeddingResultsProcessor converting string to int64: %w", err)
-						return // this shouldn't happen, so just stop the thread if it does happen.
-					}
-					err = db.CreateUpdateEmbedding(i, v.Embedding)
-					if err != nil {
-						errorCh <- err
-					}
-					err = db.UpdateAesthetic(i, v.Aesthetic)
-					if err != nil {
-						errorCh <- err
-					}
-				}
-			}
-			time.Sleep(COOLDOWN)
-		}
-	}()
+	dbImg.Aesthetic.Float64 = float64(emb.Aesthetic)
+	dbImg.Aesthetic.Valid = true
+	id, err := db.CreateUpdateImage(&dbImg)
+	if err != nil {
+		return fmt.Errorf("error adding image to database: %s:%s: %w", path, vpath, err)
+	}
+	err = db.CreateUpdateEmbedding(id, emb.Embedding)
+	if err != nil {
+		return fmt.Errorf("error adding image's embedding to database: %s:%s: %w", path, vpath, err)
+	}
+	return nil
 }
