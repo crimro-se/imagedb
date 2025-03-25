@@ -128,6 +128,7 @@ import (
 	"image"
 	"image/png"
 	"os"
+	"runtime"
 	"slices"
 
 	"fyne.io/fyne/v2"
@@ -383,6 +384,7 @@ func (gui *GUI) Build() {
 	indexesLabel := widget.NewLabel("Indexes")
 	gui.rebuildBasedirs()
 	// new basedir button & implementation
+	basedirsWrapper := container.NewHScroll(gui.guiBasedirs)
 
 	indexesButtons := gui.buildIndexButtons()
 
@@ -393,7 +395,7 @@ func (gui *GUI) Build() {
 	appLog := widget.NewRichText()
 	appLog.AppendMarkdown("**Started**")
 	leftContainer := container.NewVBox(
-		indexesLabel, gui.guiBasedirs, indexesButtons,
+		indexesLabel, basedirsWrapper, indexesButtons,
 		imgInfoLabel, imgInfo,
 		appLogLabel, appLog,
 	)
@@ -408,7 +410,8 @@ func (gui *GUI) Build() {
 	// DIALOGUES ---------------------------------------------------
 	gui.indexingDialogue = NewImageProcessDialogue(gui.window)
 
-	total := container.NewHSplit(leftContainer, rightContainer)
+	split := widget.NewSeparator()
+	total := container.NewHBox(leftContainer, split, rightContainer)
 	gui.window.SetContent(total)
 	gui.window.Resize(fyne.NewSquareSize(600))
 }
@@ -471,7 +474,9 @@ func NewImageProcessDialogue(w fyne.Window) *ImageProcessDialogue {
 	startBtn = widget.NewButton("Start", func() {
 		startBtn.Disable()
 		go func() {
-			aw := archivewalk.NewArchiveWalker(6, errCh, true, true, ipd.processor.Handler)
+			logBox.Append("Started\n")
+			threadsToUse := max(runtime.NumCPU()-2, 2)
+			aw := archivewalk.NewArchiveWalker(threadsToUse, errCh, true, true, ipd.processor.Handler)
 			aw.Walk(ipd.basedir.Directory, ipd.ctx)
 			logBox.Append("Done\n")
 		}()
