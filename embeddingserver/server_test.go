@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"testing"
-	"time"
 )
 
 var testimg_b64 string = `
@@ -116,6 +115,4 @@ func TestEmbServer(t *testing.T) {
 	if len(emb.Embedding) < 1 {
 		t.Errorf("Embedding len unexpectedly < 1")
 	}
-
-	time.Sleep(2 * time.Second)
 }
