@@ -5,6 +5,9 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"image"
+	"os"
+	"strings"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/jmoiron/sqlx"
@@ -20,15 +23,43 @@ type Basedir struct {
 }
 
 type Image struct {
-	ID        int64           `db:"rowid"`
-	BasedirID int64           `db:"basedir_id"`
-	Path      string          `db:"parent_path"`
-	SubPath   string          `db:"sub_path"`
-	Tags      sql.NullString  `db:"tags"`
-	Aesthetic sql.NullFloat64 `db:"aesthetic"`
-	Width     int64           `db:"width"`
-	Height    int64           `db:"height"`
-	FileSize  int64           `db:"filesize"`
+	ID          int64           `db:"rowid"`
+	BasedirID   int64           `db:"basedir_id"`
+	BasedirPath string          // obtain via foreign key if needed.
+	Path        string          `db:"parent_path"` // path of parent directory or zip file
+	SubPath     string          `db:"sub_path"`    // filename or path within zip
+	Tags        sql.NullString  `db:"tags"`
+	Aesthetic   sql.NullFloat64 `db:"aesthetic"`
+	Width       int64           `db:"width"`
+	Height      int64           `db:"height"`
+	FileSize    int64           `db:"filesize"`
+}
+
+func addTrailingSlash(path string) string {
+	if !strings.HasSuffix(path, "/") {
+		return path + "/"
+	}
+	return path
+}
+
+// todo: handle archives
+// the image's BasedirPath needs to be set first
+func (dbImg *Image) Load() (image.Image, error) {
+	// Open the file for reading
+	filePath := addTrailingSlash(dbImg.BasedirPath) + addTrailingSlash(dbImg.Path) + dbImg.SubPath
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	// Decode the image
+	imgImg, _, err := image.Decode(file)
+	if err != nil {
+		return nil, err
+	}
+	return imgImg, nil
+
 }
 
 type Database struct {
@@ -62,6 +93,17 @@ func NewDatabase(file string, execSchema bool) (*Database, error) {
 	return &myself, err
 }
 
+func (s *Database) AugmentImages(images []Image) ([]Image, error) {
+	basedirs, err := s.GetAllBasedirAsMap()
+	if err != nil {
+		return nil, err
+	}
+	for i := range images {
+		images[i].BasedirPath = basedirs[images[i].BasedirID]
+	}
+	return images, nil
+}
+
 func (s *Database) CreateBasedir(directory string) error {
 	_, err := s.con.Exec(`
 	INSERT INTO basedir 
@@ -74,6 +116,18 @@ func (s *Database) GetAllBasedir() ([]Basedir, error) {
 	based := make([]Basedir, 0)
 	err := s.con.Select(&based, `SELECT rowid,* FROM basedir`)
 	return based, err
+}
+
+func (s *Database) GetAllBasedirAsMap() (map[int64]string, error) {
+	basedMap := make(map[int64]string, 0)
+	bds, err := s.GetAllBasedir()
+	if err != nil {
+		return nil, err
+	}
+	for _, db := range bds {
+		basedMap[db.ID] = db.Directory
+	}
+	return basedMap, nil
 }
 
 func (s *Database) DeleteBasedir(id int64) error {
