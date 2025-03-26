@@ -1,133 +1,9 @@
 package main
 
-/*
-
-var (
-	ctx        context.Context
-	cancelFunc context.CancelFunc
-	db         *Database
-	ip         *ImageProcessor
-	errCh      chan error
-	aw         *archivewalk.ArchiveWalk
-)
-
-func main() {
-	a := app.New()
-	w := a.NewWindow("Image Database Application")
-
-	dbfilename := "file.sqlite"
-	var err error
-
-	ctx, cancelFunc = context.WithCancel(context.Background())
-	errCh = make(chan error, 5)
-	go func() {
-		for err := range errCh {
-			dialog.ShowError(err, w)
-		}
-	}()
-
-	db, err = NewDatabase(dbfilename, true)
-	if err != nil {
-		dialog.ShowError(err, w)
-		return
-	}
-	defer db.Close()
-
-	ip, err = NewImageProcessor(dbfilename, 0)
-	if err != nil {
-		dialog.ShowError(err, w)
-		return
-	}
-
-	ip.RunResultsProcessor(ctx, errCh)
-
-	startButton := widget.NewButton("Start Processing", func() {
-		if aw == nil {
-			aw = archivewalk.NewArchiveWalker(10, errCh, true, true, ip.Handler)
-		}
-		go aw.Walk("test_data/valid", ctx)
-	})
-
-	stopButton := widget.NewButton("Stop Processing", func() {
-		cancelFunc()
-		ctx, cancelFunc = context.WithCancel(context.Background())
-		ip.RunResultsProcessor(ctx, errCh)
-	})
-
-	imageList := widget.NewMultiLineEntry()
-
-	updateImageList := func() {
-		imgs, err := db.ReadImages(10, 0, OrderByPathAsc)
-		if err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-		var sb strings.Builder
-		for _, img := range imgs {
-			sb.WriteString(fmt.Sprintf("ID: %d, Path: %s/%s\n", img.ID, img.Path, img.SubPath))
-		}
-		imageList.SetText(sb.String())
-	}
-
-	updateButton := widget.NewButton("Update Image List", updateImageList)
-
-	content := container.NewVBox(
-		widget.NewLabel("Image Database Application"),
-		startButton,
-		stopButton,
-		updateButton,
-		widget.NewSeparator(),
-		widget.NewLabel("Recent Images:"),
-		imageList,
-	)
-
-	w.SetContent(content)
-	w.Resize(fyne.NewSize(600, 400))
-	w.ShowAndRun()
-}
-
-
-
-type ImageData struct {
-	dbData *Image
-	Image  *canvas.Image
-}
-
-type ImageViewerCallback func(dbData Image)
-
-// can display
-type ImageViewerManager struct {
-	mu           sync.Mutex
-	images       []ImageData
-	onClickFunc  ImageViewerCallback
-	layout       *fyne.Container
-	imageButtons fyne.Widget
-}
-
-func NewImageViewerManager() {
-	var ivm ImageViewerManager
-	ivm.layout = container.NewGridWrap(fyne.NewSize(128, 128))
-}
-
-func (ivm *ImageViewerManager) Add(img image.Image, dbdata Image) {
-	image := canvas.NewImageFromImage(img)
-	id := ImageData{
-		dbData: &dbdata,
-		Image:  image,
-	}
-	ivm.images = append(ivm.images, id)
-	fyne.NewStaticResource()
-	ivm.layout.Add(image)
-}
-
-*/
-
 import (
 	"context"
 	"fmt"
 	"image"
-	"image/png"
-	"os"
 	"runtime"
 	"slices"
 
@@ -139,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	"github.com/crimro-se/imagedb/archivewalk"
+	"github.com/crimro-se/imagedb/imageutil"
 )
 
 type ImageList struct {
@@ -146,24 +23,65 @@ type ImageList struct {
 	callback func(Image)
 }
 
+var THUMBNAIL_SIZE = 128
+
 // The GUI element we use to display many images, typically query results.
 func NewImageList(clickCallback func(Image)) *ImageList {
 	il := ImageList{
 		callback:  clickCallback,
-		Container: container.NewGridWrap(fyne.NewSize(128, 128)), // TODO: de-hardcode this
+		Container: container.NewGridWrap(fyne.NewSquareSize(float32(THUMBNAIL_SIZE))), // TODO: de-hardcode this
 	}
 	return &il
 }
 
 func (il *ImageList) AddImage(img image.Image, dbdata Image) {
 	imgBtn := NewImageButtonFromImage(img, dbdata, il.callback)
+	//imgBtn.SetMinSize(fyne.NewSquareSize(64))
+	imgBtn.Image.FillMode = canvas.ImageFillContain
+	//imgBtn.Resize(fyne.NewSquareSize(64))
 	il.Add(imgBtn)
+	//il.Add(widget.NewButton("test", nil))
 }
 
 func (il *ImageList) CreateRenderer() fyne.WidgetRenderer {
 	return widget.NewSimpleRenderer(il.Container)
 }
 
+// An image button+data package. The data set is also available on click
+type ImageButtonWithData[T any] struct {
+	widget.BaseWidget // Embed BaseWidget to get proper widget behavior
+	Image             *canvas.Image
+	onClick           func(T)
+	data              T
+}
+
+func NewImageButtonFromImage[T any](img image.Image, data T, onClick func(T)) *ImageButtonWithData[T] {
+	ib := &ImageButtonWithData[T]{
+		Image:   canvas.NewImageFromImage(img),
+		onClick: onClick,
+		data:    data,
+	}
+	ib.ExtendBaseWidget(ib) // Initialize BaseWidget
+	ib.Image.FillMode = canvas.ImageFillContain
+	return ib
+}
+
+// CreateRenderer implements fyne.Widget
+func (ib *ImageButtonWithData[T]) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(ib.Image)
+}
+
+// Tapped implements fyne.Tappable
+func (ib *ImageButtonWithData[T]) Tapped(*fyne.PointEvent) {
+	ib.onClick(ib.data)
+}
+
+// MinSize implements fyne.Widget
+func (ib *ImageButtonWithData[T]) MinSize() fyne.Size {
+	return fyne.NewSize(64, 64) // Set your minimum size here
+}
+
+/*
 // an image button+data package. The data set is also available on click
 type ImageButtonWithData[T any] struct {
 	*canvas.Image
@@ -187,6 +105,8 @@ func (ib *ImageButtonWithData[T]) CreateRenderer() fyne.WidgetRenderer {
 func (ib *ImageButtonWithData[T]) Tapped(ev *fyne.PointEvent) {
 	ib.onClick(ib.data)
 }
+
+*/
 
 type GUI struct {
 	window   fyne.Window
@@ -246,7 +166,7 @@ func (gui *GUI) rebuildBasedirs() {
 		if !ok {
 			oldstate = binding.NewBool()
 		}
-		check := widget.NewCheckWithData(midTruncateString(basedir.Directory, 25), oldstate)
+		check := widget.NewCheckWithData(midTruncateString(basedir.Directory, 36), oldstate)
 		gui.basedirsState[basedir.ID] = oldstate
 		gui.guiBasedirs.Add(check)
 	}
@@ -361,6 +281,7 @@ func (gui *GUI) buildIndexButtons() *fyne.Container {
 	return indexesButtons
 }
 
+/*
 func loadPNGFromFile(filePath string) (image.Image, error) {
 	// Open the file for reading
 	file, err := os.Open(filePath)
@@ -377,6 +298,7 @@ func loadPNGFromFile(filePath string) (image.Image, error) {
 
 	return img, nil
 }
+*/
 
 // assembles the main gui window and wires all the components on it
 func (gui *GUI) Build() {
@@ -402,16 +324,16 @@ func (gui *GUI) Build() {
 	// RIGHT ----------------------------------------------------
 	searchbox := widget.NewEntry()
 	gui.imageList = NewImageList(func(im Image) {
-		// TODO: real handler
-		fmt.Println("Test")
+		fmt.Println(im.SubPath)
 	})
-	rightContainer := container.NewVBox(searchbox, gui.imageList)
+	scroll := container.NewVScroll(gui.imageList)
+	rightContainer := container.NewBorder(searchbox, nil, nil, nil, scroll)
 
 	// DIALOGUES ---------------------------------------------------
 	gui.indexingDialogue = NewImageProcessDialogue(gui.window)
 
-	split := widget.NewSeparator()
-	total := container.NewHBox(leftContainer, split, rightContainer)
+	//split := widget.NewSeparator()
+	total := container.NewBorder(nil, nil, leftContainer, nil, rightContainer)
 	gui.window.SetContent(total)
 	gui.window.Resize(fyne.NewSquareSize(600))
 }
@@ -491,6 +413,30 @@ func NewImageProcessDialogue(w fyne.Window) *ImageProcessDialogue {
 	return ipd
 }
 
+func (gui *GUI) showSomething() {
+	imgs, err := gui.db.ReadImages(20, 0, OrderByAestheticDesc)
+	if err != nil {
+		panic(err)
+	}
+	gui.ShowImages(imgs)
+}
+
+// Update gui content to display the given images in order.
+func (gui *GUI) ShowImages(dbImages []Image) {
+	dbImages, err := gui.db.AugmentImages(dbImages)
+	if err != nil {
+		panic(err)
+	}
+	for _, img := range dbImages {
+		imgImg, err := img.Load()
+		imgImg = imageutil.ScaleImageRGBA(imgImg, THUMBNAIL_SIZE)
+		if err != nil {
+			panic(err)
+		}
+		gui.imageList.AddImage(imgImg, img)
+	}
+}
+
 func main() {
 	a := app.NewWithID("crimro-se/imagedb")
 	w := a.NewWindow("imagedb")
@@ -502,6 +448,7 @@ func main() {
 	defer db.Close()
 	gui := NewGUI(w, db)
 	gui.Build()
+	gui.showSomething()
 	w.ShowAndRun()
 
 }
