@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/crimro-se/imagedb/embeddingserver"
+	"github.com/crimro-se/imagedb/imagedbutil"
 	"github.com/crimro-se/imagedb/imageutil"
 	"github.com/crimro-se/imagedb/threadboundresourcepool"
 	"golang.org/x/image/webp"
@@ -83,9 +84,9 @@ func (p *ImageProcessor) Handler(path, vpath string, file io.Reader, d fs.DirEnt
 	var ext string
 	vpath_exists := (len(vpath) > 0)
 	if vpath_exists {
-		ext = getExt(vpath)
+		ext = imagedbutil.GetExt(vpath)
 	} else {
-		ext = getExt(path)
+		ext = imagedbutil.GetExt(vpath)
 	}
 
 	db := p.dbConnections.GetResource(threadID)

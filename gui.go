@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
@@ -435,20 +434,4 @@ func (gui *GUI) ShowImages(dbImages []Image) {
 		}
 		gui.imageList.AddImage(imgImg, img)
 	}
-}
-
-func main() {
-	a := app.NewWithID("crimro-se/imagedb")
-	w := a.NewWindow("imagedb")
-	db, err := NewDatabase("db.sqlite", true)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer db.Close()
-	gui := NewGUI(w, db)
-	gui.Build()
-	gui.showSomething()
-	w.ShowAndRun()
-
 }
