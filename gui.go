@@ -19,13 +19,13 @@ import (
 
 type ImageList struct {
 	*fyne.Container
-	callback func(Image)
+	callback func(*fyne.PointEvent, Image)
 }
 
 var THUMBNAIL_SIZE = 128
 
 // The GUI element we use to display many images, typically query results.
-func NewImageList(clickCallback func(Image)) *ImageList {
+func NewImageList(clickCallback func(*fyne.PointEvent, Image)) *ImageList {
 	il := ImageList{
 		callback:  clickCallback,
 		Container: container.NewGridWrap(fyne.NewSquareSize(float32(THUMBNAIL_SIZE))), // TODO: de-hardcode this
@@ -50,11 +50,11 @@ func (il *ImageList) CreateRenderer() fyne.WidgetRenderer {
 type ImageButtonWithData[T any] struct {
 	widget.BaseWidget // Embed BaseWidget to get proper widget behavior
 	Image             *canvas.Image
-	onClick           func(T)
+	onClick           func(*fyne.PointEvent, T)
 	data              T
 }
 
-func NewImageButtonFromImage[T any](img image.Image, data T, onClick func(T)) *ImageButtonWithData[T] {
+func NewImageButtonFromImage[T any](img image.Image, data T, onClick func(*fyne.PointEvent, T)) *ImageButtonWithData[T] {
 	ib := &ImageButtonWithData[T]{
 		Image:   canvas.NewImageFromImage(img),
 		onClick: onClick,
@@ -71,8 +71,8 @@ func (ib *ImageButtonWithData[T]) CreateRenderer() fyne.WidgetRenderer {
 }
 
 // Tapped implements fyne.Tappable
-func (ib *ImageButtonWithData[T]) Tapped(*fyne.PointEvent) {
-	ib.onClick(ib.data)
+func (ib *ImageButtonWithData[T]) Tapped(pe *fyne.PointEvent) {
+	ib.onClick(pe, ib.data)
 }
 
 // MinSize implements fyne.Widget
@@ -299,6 +299,24 @@ func loadPNGFromFile(filePath string) (image.Image, error) {
 }
 */
 
+/* Display a pop-up menu when an image is clicked (for now, I don't care which mouse button clicked.)
+ */
+func (gui *GUI) ShowThumbnailMenu(pe *fyne.PointEvent, im Image) {
+
+	items := []*fyne.MenuItem{
+		fyne.NewMenuItem("Option 1", func() {
+			// Action for Option 1
+		}),
+		fyne.NewMenuItem("Option 2", func() {
+			// Action for Option 2
+		}),
+	}
+	menu := fyne.NewMenu("Image", items...)
+
+	popup := widget.NewPopUpMenu(menu, gui.window.Canvas())
+	popup.ShowAtPosition(pe.AbsolutePosition)
+}
+
 // assembles the main gui window and wires all the components on it
 func (gui *GUI) Build() {
 	// LEFT ----------------------------------------------------
@@ -322,9 +340,7 @@ func (gui *GUI) Build() {
 	)
 	// RIGHT ----------------------------------------------------
 	searchbox := widget.NewEntry()
-	gui.imageList = NewImageList(func(im Image) {
-		fmt.Println(im.SubPath)
-	})
+	gui.imageList = NewImageList(gui.ShowThumbnailMenu)
 	scroll := container.NewVScroll(gui.imageList)
 	rightContainer := container.NewBorder(searchbox, nil, nil, nil, scroll)
 
