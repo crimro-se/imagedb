@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
+	"github.com/crimro-se/imagedb/querystructs"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -44,9 +45,15 @@ func addTrailingSlash(path string) string {
 
 // todo: handle archives
 // the image's BasedirPath needs to be set first
+func (dbImg *Image) GetRealPath() string {
+	return addTrailingSlash(dbImg.BasedirPath) + addTrailingSlash(dbImg.Path) + dbImg.SubPath
+}
+
+// todo: handle archives
+// the image's BasedirPath needs to be set first
 func (dbImg *Image) Load() (image.Image, error) {
 	// Open the file for reading
-	filePath := addTrailingSlash(dbImg.BasedirPath) + addTrailingSlash(dbImg.Path) + dbImg.SubPath
+	filePath := dbImg.GetRealPath()
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
@@ -63,7 +70,8 @@ func (dbImg *Image) Load() (image.Image, error) {
 }
 
 type Database struct {
-	con *sqlx.DB
+	con                  *sqlx.DB
+	whereClauseGenerator func(QueryFilter) (string, error)
 	// pre-calculated strings for use in queries
 	insertIntoImageTableSQL     string
 	insertIntoImageTableSQLNoID string
@@ -90,6 +98,10 @@ func NewDatabase(file string, execSchema bool) (*Database, error) {
 		return &myself, err
 	}
 	myself.insertIntoImageTableSQLNoID, err = structToSQLString(Image{}, []string{"rowid"})
+	if err != nil {
+		return &myself, err
+	}
+	myself.whereClauseGenerator, err = querystructs.BuildWhereClauseGenerator(QueryFilter{})
 	return &myself, err
 }
 
@@ -196,15 +208,65 @@ func (s *Database) CreateUpdateImage(img *Image) (int64, error) {
 	}
 }
 
+/*
 // returns some images from the db, sorted by path
 func (s *Database) ReadImages(limit, offset int, so SortOrder) ([]Image, error) {
 	imgs := make([]Image, 0)
 	err := s.con.Select(&imgs, `
-	SELECT rowid,* 
-	FROM images 
+	SELECT rowid,*
+	FROM images
     `+sortOrderToQuery(so)+`
 	LIMIT ? OFFSET ?`, limit, offset)
 	return imgs, err
+}
+*/
+
+// returns some images from the db, filtered via Query Filter
+// nb: empty query filter won't work, at least set the Limit
+func (s *Database) ReadImages(qf QueryFilter, so SortOrder) ([]Image, error) {
+	if len(qf.BaseDirs) == 0 {
+		return nil, fmt.Errorf("no basedirs specified in query")
+	}
+	where, err := s.whereClauseGenerator(qf)
+	if err != nil {
+		return nil, err
+	}
+	if len(where) > 0 {
+		where = "WHERE " + where + " "
+	}
+	queryString := `
+	SELECT rowid,* FROM images ` + where + sortOrderToQuery(so) + `
+	LIMIT :limit OFFSET :offset`
+
+	query, args, err := sqlx.Named(queryString, qf)
+	if err != nil {
+		return nil, err
+	}
+	query, args, err = sqlx.In(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	query = s.con.Rebind(query)
+
+	rows, err := s.con.Queryx(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	imgs, err := s.scanAllRows(rows)
+	return imgs, err
+}
+
+func (s *Database) scanAllRows(rows *sqlx.Rows) ([]Image, error) {
+	imgs := make([]Image, 0)
+	var img Image
+	for rows.Next() {
+		err := rows.StructScan(&img)
+		if err != nil {
+			return imgs, err
+		}
+		imgs = append(imgs, img)
+	}
+	return imgs, nil
 }
 
 // Finds the image entry in the database with the given path. (exact match)
@@ -264,6 +326,79 @@ func (s *Database) MatchEmbeddings(target []float32, limit int) ([]Image, error)
 	}
 
 	return images, err
+}
+
+func (s *Database) ReadEmbedding(imageRowID int64) ([]byte, error) {
+	emb := make([]byte, 0)
+	queryString := "SELECT embedding FROM embeddings WHERE rowid = ?"
+	rows, err := s.con.Queryx(queryString, imageRowID)
+	for rows.Next() {
+		err = rows.Scan(&emb)
+	}
+	return emb, err
+}
+
+// nb: target can be produced from sqlite_vec.SerializeFloat32
+func (s *Database) MatchEmbeddingsWithFilter(target []byte, qf QueryFilter) ([]Image, error) {
+	if qf.Limit <= 0 {
+		return nil, errors.New("limit must be greater than zero")
+	}
+	if len(qf.BaseDirs) == 0 {
+		return nil, fmt.Errorf("no basedirs specified in query")
+	}
+
+	// Generate WHERE clause for query filter
+	where, err := s.whereClauseGenerator(qf)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build the query
+	queryString := `
+		WITH emb AS (
+			SELECT rowid, distance 
+			FROM embeddings 
+			WHERE embedding match ? 
+			ORDER BY distance 
+			LIMIT ?
+		) 
+		SELECT images.rowid, images.* 
+		FROM images, emb 
+		WHERE images.rowid = emb.rowid `
+
+	// Add query filter conditions if they exist
+	if len(where) > 0 {
+		queryString += "AND " + where + " "
+	}
+
+	queryString += "ORDER BY emb.distance ASC"
+
+	// Prepare named query
+	namedQuery, args, err := sqlx.Named(queryString, qf)
+	if err != nil {
+		return nil, err
+	}
+
+	// Insert the embedding and limit parameters at the beginning
+	args = append([]interface{}{target, qf.Limit}, args...)
+
+	// Handle IN clauses if needed
+	namedQuery, args, err = sqlx.In(namedQuery, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Rebind for the specific database dialect
+	namedQuery = s.con.Rebind(namedQuery)
+
+	// Execute query
+	images := make([]Image, 0)
+	err = s.con.Select(&images, namedQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to match embeddings with filter: %w", err)
+	}
+
+	return images, nil
 }
 
 func (s *Database) Close() error {

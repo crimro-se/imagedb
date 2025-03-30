@@ -6,6 +6,8 @@ import (
 	"image"
 	"runtime"
 	"slices"
+	"strconv"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -15,6 +17,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/crimro-se/imagedb/archivewalk"
 	"github.com/crimro-se/imagedb/imageutil"
+	"github.com/skratchdot/open-golang/open"
 )
 
 type ImageList struct {
@@ -22,7 +25,7 @@ type ImageList struct {
 	callback func(*fyne.PointEvent, Image)
 }
 
-var THUMBNAIL_SIZE = 128
+var THUMBNAIL_SIZE = 256
 
 // The GUI element we use to display many images, typically query results.
 func NewImageList(clickCallback func(*fyne.PointEvent, Image)) *ImageList {
@@ -204,6 +207,19 @@ func (gui *GUI) getActiveBasedirsID() []int64 {
 	return ints
 }
 
+// for convenient use with QueryFilter
+func (gui *GUI) getActiveBasedirsString() string {
+	basedirs := gui.getActiveBasedirsID()
+	var sb strings.Builder
+	for i, basedir := range basedirs {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(strconv.FormatInt(basedir, 10))
+	}
+	return sb.String()
+}
+
 // list of Basedir that the user has enabled in the UI
 func (gui *GUI) getActiveBasedirs() []Basedir {
 	filteredBasedirs := make([]Basedir, 0)
@@ -304,17 +320,45 @@ func loadPNGFromFile(filePath string) (image.Image, error) {
 func (gui *GUI) ShowThumbnailMenu(pe *fyne.PointEvent, im Image) {
 
 	items := []*fyne.MenuItem{
-		fyne.NewMenuItem("Option 1", func() {
-			// Action for Option 1
+		fyne.NewMenuItem("Open Image", func() {
+			//todo: gui err
+			err := open.Run(im.GetRealPath())
+			if err != nil {
+				panic(err)
+			}
 		}),
-		fyne.NewMenuItem("Option 2", func() {
-			// Action for Option 2
+		fyne.NewMenuItem("Find Similar Images", func() {
+			data, err := gui.db.ReadEmbedding(im.ID)
+			// todo: GUI err
+			if err != nil {
+				panic(err)
+			}
+			basedirs := gui.getActiveBasedirsID()
+			imgs, err := gui.db.MatchEmbeddingsWithFilter(data, QueryFilter{Limit: 10, BaseDirs: basedirs})
+			if err != nil {
+				panic(err)
+			}
+			gui.imageList.RemoveAll()
+			gui.ShowImages(imgs)
 		}),
 	}
 	menu := fyne.NewMenu("Image", items...)
 
 	popup := widget.NewPopUpMenu(menu, gui.window.Canvas())
 	popup.ShowAtPosition(pe.AbsolutePosition)
+}
+
+// todo: this should be a new object type
+func (gui *GUI) buildSearchGUI() *fyne.Container {
+	searchbox := widget.NewEntry()
+	btn := widget.NewButton("Search", func() {
+		gui.EmptyQuery()
+		fmt.Println(gui.getActiveBasedirsString())
+	})
+
+	final := container.NewGridWithColumns(2, searchbox, btn)
+
+	return final
 }
 
 // assembles the main gui window and wires all the components on it
@@ -339,7 +383,7 @@ func (gui *GUI) Build() {
 		appLogLabel, appLog,
 	)
 	// RIGHT ----------------------------------------------------
-	searchbox := widget.NewEntry()
+	searchbox := gui.buildSearchGUI()
 	gui.imageList = NewImageList(gui.ShowThumbnailMenu)
 	scroll := container.NewVScroll(gui.imageList)
 	rightContainer := container.NewBorder(searchbox, nil, nil, nil, scroll)
@@ -428,11 +472,17 @@ func NewImageProcessDialogue(w fyne.Window) *ImageProcessDialogue {
 	return ipd
 }
 
-func (gui *GUI) showSomething() {
-	imgs, err := gui.db.ReadImages(20, 0, OrderByAestheticDesc)
+// the query to use when no search text or image have been specified
+func (gui *GUI) EmptyQuery() {
+	basedirs := gui.getActiveBasedirsID()
+	if len(basedirs) == 0 {
+		return
+	}
+	imgs, err := gui.db.ReadImages(QueryFilter{Limit: 128, BaseDirs: basedirs}, OrderByAestheticDesc)
 	if err != nil {
 		panic(err)
 	}
+	gui.imageList.RemoveAll()
 	gui.ShowImages(imgs)
 }
 
@@ -443,11 +493,15 @@ func (gui *GUI) ShowImages(dbImages []Image) {
 		panic(err)
 	}
 	for _, img := range dbImages {
-		imgImg, err := img.Load()
-		imgImg = imageutil.ScaleImageRGBA(imgImg, THUMBNAIL_SIZE)
-		if err != nil {
-			panic(err)
-		}
-		gui.imageList.AddImage(imgImg, img)
+		//todo: is it threadsafe to add to imageList like this?
+		//todo: preserve order
+		go func() {
+			imgImg, err := img.Load()
+			imgImg = imageutil.ScaleImageRGBA(imgImg, THUMBNAIL_SIZE)
+			if err != nil {
+				panic(err)
+			}
+			gui.imageList.AddImage(imgImg, img)
+		}()
 	}
 }

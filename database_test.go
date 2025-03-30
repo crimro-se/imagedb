@@ -70,7 +70,7 @@ func TestDatabase(t *testing.T) {
 	}
 	imgBest.ID = idBest // Update imgBest with the returned ID
 
-	imgs, err := db.ReadImages(3, 0, OrderByPathDesc)
+	imgs, err := db.ReadImages(QueryFilter{Limit: 3, Offset: 0, BaseDirs: []int64{1}}, OrderByPathDesc)
 	if err != nil {
 		t.Fatal(err)
 	}

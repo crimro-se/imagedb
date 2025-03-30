@@ -20,17 +20,19 @@ const (
 // filtering criterea for retrieving images from the database
 // * ..PathStartsWith should end with a %
 type QueryFilter struct {
-	BaseDirs          []int           `ref:"basedir_id" db:"basedir_id_condition" clause:"in"`
+	BaseDirs          []int64         `ref:"basedir_id" db:"basedir_id_condition" clause:"IN"` // eg: string of the form "(1,2,3)" (sqlx doesn't know what to do with []int)
 	HeightMin         sql.NullInt64   `ref:"height" db:"height_min" clause:">="`
 	HeightMax         sql.NullInt64   `ref:"height" db:"height_max" clause:"<="`
 	WidthMin          sql.NullInt64   `ref:"width" db:"width_min" clause:">="`
 	WidthMax          sql.NullInt64   `ref:"width" db:"width_max" clause:"<="`
-	FileSizeMin       sql.NullInt64   `ref:"filesize" db:"filesize_min" clause:">="`
-	FileSizeMax       sql.NullInt64   `ref:"filesize" db:"filesize_max" clause:"<="`
+	FileSizeMin       sql.NullInt64   `ref:"filesize" db:"filesize_min" clause:">="` // unimplemented
+	FileSizeMax       sql.NullInt64   `ref:"filesize" db:"filesize_max" clause:"<="` // unimplemented
 	AestheticMin      sql.NullFloat64 `ref:"aesthetic" db:"aesthetic_min" clause:">="`
 	AestheticMax      sql.NullFloat64 `ref:"aesthetic" db:"aesthetic_max" clause:"<="`
-	PathStartsWith    sql.NullString
-	SubPathStartsWith sql.NullString
+	PathStartsWith    sql.NullString  `ref:"parent_path" db:"parent_path_prefix" clause:"LIKE"` // unimplemented
+	SubPathStartsWith sql.NullString  `ref:"sub_path" db:"sub_path_prefix" clause:"LIKE"`       // unimplemented
+	Limit             int             `db:"limit"`
+	Offset            int             `db:"offset"`
 }
 
 func sortOrderToQuery(so SortOrder) string {

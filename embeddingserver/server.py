@@ -10,6 +10,7 @@ from safetensors.torch import load_file
 import torch.nn as nn
 
 BATCH_SIZE = 24  # Define the batch size
+WORKERS = 2
 
 # Define the MLP model for aesthetic scoring
 class MLP(pl.LightningModule):
@@ -146,5 +147,5 @@ class ClipLitAPI(ls.LitAPI):
 
 if __name__ == "__main__":
     api = ClipLitAPI()
-    server = ls.LitServer(api, accelerator="cuda", devices=1, max_batch_size=BATCH_SIZE, workers_per_device=4)
+    server = ls.LitServer(api, accelerator="cuda", devices=1, max_batch_size=BATCH_SIZE, workers_per_device=WORKERS)
     server.run(port=5000)

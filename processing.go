@@ -86,7 +86,7 @@ func (p *ImageProcessor) Handler(path, vpath string, file io.Reader, d fs.DirEnt
 	if vpath_exists {
 		ext = imagedbutil.GetExt(vpath)
 	} else {
-		ext = imagedbutil.GetExt(vpath)
+		ext = imagedbutil.GetExt(path)
 	}
 
 	db := p.dbConnections.GetResource(threadID)
@@ -101,7 +101,7 @@ func (p *ImageProcessor) Handler(path, vpath string, file io.Reader, d fs.DirEnt
 		return err
 	}
 	if len(matchedImage) > 0 {
-		if matchedImage[0].Aesthetic.Valid {
+		if matchedImage[0].Aesthetic.Valid && (matchedImage[0].Aesthetic.Float64 > 0) {
 			return nil
 		}
 	}

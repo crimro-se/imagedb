@@ -17,7 +17,7 @@ func main() {
 	defer db.Close()
 	gui := NewGUI(w, db)
 	gui.Build()
-	gui.showSomething()
+	gui.EmptyQuery()
 	w.ShowAndRun()
 
 }
