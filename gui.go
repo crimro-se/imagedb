@@ -334,7 +334,7 @@ func (gui *GUI) ShowThumbnailMenu(pe *fyne.PointEvent, im Image) {
 				panic(err)
 			}
 			basedirs := gui.getActiveBasedirsID()
-			imgs, err := gui.db.MatchEmbeddingsWithFilter(data, QueryFilter{Limit: 10, BaseDirs: basedirs})
+			imgs, err := gui.db.MatchEmbeddingsWithFilter(data, QueryFilter{Limit: 64, BaseDirs: basedirs})
 			if err != nil {
 				panic(err)
 			}

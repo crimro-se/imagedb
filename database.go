@@ -354,24 +354,22 @@ func (s *Database) MatchEmbeddingsWithFilter(target []byte, qf QueryFilter) ([]I
 	}
 
 	// Build the query
+	// CTEs because joins on vector table aren't possible.
 	queryString := `
-		WITH emb AS (
+		WITH filtered_images AS (
+			SELECT rowid
+			FROM images
+			WHERE ` + where + `
+		),
+		filtered AS (
 			SELECT rowid, distance 
-			FROM embeddings 
-			WHERE embedding match ? 
-			ORDER BY distance 
-			LIMIT ?
-		) 
-		SELECT images.rowid, images.* 
-		FROM images, emb 
-		WHERE images.rowid = emb.rowid `
-
-	// Add query filter conditions if they exist
-	if len(where) > 0 {
-		queryString += "AND " + where + " "
-	}
-
-	queryString += "ORDER BY emb.distance ASC"
+			FROM embeddings
+			WHERE embedding MATCH ? AND k = ? AND rowid IN (select rowid FROM filtered_images)
+		)
+		SELECT images.rowid, images.*
+		FROM images, filtered
+		WHERE images.rowid = filtered.rowid
+		ORDER BY distance ASC`
 
 	// Prepare named query
 	namedQuery, args, err := sqlx.Named(queryString, qf)
@@ -380,7 +378,8 @@ func (s *Database) MatchEmbeddingsWithFilter(target []byte, qf QueryFilter) ([]I
 	}
 
 	// Insert the embedding and limit parameters at the beginning
-	args = append([]interface{}{target, qf.Limit}, args...)
+	//args = append([]interface{}{target, qf.Limit}, args...)
+	args = append(args, target, qf.Limit)
 
 	// Handle IN clauses if needed
 	namedQuery, args, err = sqlx.In(namedQuery, args...)
