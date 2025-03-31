@@ -605,4 +605,5 @@ func (gui *GUI) ShowImages(dbImages []Image) {
 		}
 		gui.imageList.AddImage(result.img, result.imgData)
 	}
+	gui.imageList.Refresh()
 }
