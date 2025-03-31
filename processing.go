@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/crimro-se/imagedb/embeddingserver"
 	"github.com/crimro-se/imagedb/imagedbutil"
@@ -19,9 +18,6 @@ import (
 )
 
 const MAXIMAGESIZE = 512
-const MAXQUEUESIZE = 96
-const COOLDOWN = 250 * time.Millisecond
-const APISERVER = "http://localhost:5000"
 
 // handles digesting images into the database &  embedding server
 type ImageProcessor struct {
@@ -30,7 +26,7 @@ type ImageProcessor struct {
 	apiServer     *embeddingserver.Client
 }
 
-func NewImageProcessor(dbfile string, basedir Basedir) (*ImageProcessor, error) {
+func NewImageProcessor(dbfile string, basedir Basedir, serverAddress string) (*ImageProcessor, error) {
 	if len(dbfile) < 1 {
 		return nil, fmt.Errorf("database filename can't be empty")
 	}
@@ -46,7 +42,7 @@ func NewImageProcessor(dbfile string, basedir Basedir) (*ImageProcessor, error) 
 				}
 				return db
 			}),
-		apiServer: embeddingserver.NewClient(APISERVER),
+		apiServer: embeddingserver.NewClient(serverAddress),
 	}
 	return &processor, nil
 }
