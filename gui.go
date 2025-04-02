@@ -4,133 +4,31 @@ import (
 	"context"
 	"fmt"
 	"image"
-	"log"
 	"runtime"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/crimro-se/imagedb/archivewalk"
 	"github.com/crimro-se/imagedb/embeddingserver"
+	"github.com/crimro-se/imagedb/imagedbutil"
 	"github.com/crimro-se/imagedb/imageutil"
 	"github.com/skratchdot/open-golang/open"
 )
-
-type ImageList struct {
-	*fyne.Container
-	callback func(*fyne.PointEvent, Image)
-}
 
 var THUMBNAIL_SIZE = 256
 
 const APISERVER = "http://localhost:5000"
 
-// The GUI element we use to display many images, typically query results.
-func NewImageList(clickCallback func(*fyne.PointEvent, Image)) *ImageList {
-	il := ImageList{
-		callback:  clickCallback,
-		Container: container.NewGridWrap(fyne.NewSquareSize(float32(THUMBNAIL_SIZE))), // TODO: de-hardcode this
-	}
-	return &il
-}
-
-func (il *ImageList) AddImage(img image.Image, dbdata Image) {
-	imgBtn := NewImageButtonFromImage(img, dbdata, il.callback)
-	//imgBtn.SetMinSize(fyne.NewSquareSize(64))
-	imgBtn.Image.FillMode = canvas.ImageFillContain
-	//imgBtn.Resize(fyne.NewSquareSize(64))
-	il.Add(imgBtn)
-	//il.Add(widget.NewButton("test", nil))
-}
-
-func (il *ImageList) CreateRenderer() fyne.WidgetRenderer {
-	return widget.NewSimpleRenderer(il.Container)
-}
-
-// An image button+data package. The data set is also available on click
-type ImageButtonWithData[T any] struct {
-	widget.BaseWidget // Embed BaseWidget to get proper widget behavior
-	Image             *canvas.Image
-	onClick           func(*fyne.PointEvent, T)
-	data              T
-}
-
-func NewImageButtonFromImage[T any](img image.Image, data T, onClick func(*fyne.PointEvent, T)) *ImageButtonWithData[T] {
-	ib := &ImageButtonWithData[T]{
-		Image:   canvas.NewImageFromImage(img),
-		onClick: onClick,
-		data:    data,
-	}
-	ib.ExtendBaseWidget(ib) // Initialize BaseWidget
-	ib.Image.FillMode = canvas.ImageFillContain
-	return ib
-}
-
-// CreateRenderer implements fyne.Widget
-func (ib *ImageButtonWithData[T]) CreateRenderer() fyne.WidgetRenderer {
-	return widget.NewSimpleRenderer(ib.Image)
-}
-
-// Tapped implements fyne.Tappable
-func (ib *ImageButtonWithData[T]) Tapped(pe *fyne.PointEvent) {
-	ib.onClick(pe, ib.data)
-}
-
-// MinSize implements fyne.Widget
-func (ib *ImageButtonWithData[T]) MinSize() fyne.Size {
-	return fyne.NewSize(64, 64) // Set your minimum size here
-}
-
-func (ib *ImageButtonWithData[T]) Dispose() {
-	// Clear the image resource
-	ib.Image.Image = nil
-	ib.Image = nil
-}
-
-func (il *ImageList) Clear() {
-	// Dispose all children first
-	for _, obj := range il.Objects {
-		if ib, ok := obj.(interface{ Dispose() }); ok {
-			ib.Dispose()
-		}
-	}
-	// Then remove them
-	il.Objects = nil
-	il.Refresh()
-}
-
-/*
-// an image button+data package. The data set is also available on click
-type ImageButtonWithData[T any] struct {
-	*canvas.Image
-	onClick func(T)
-	data    T
-}
-
-func NewImageButtonFromImage[T any](img image.Image, data T, onClick func(T)) *ImageButtonWithData[T] {
-	ib := ImageButtonWithData[T]{
-		onClick: onClick,
-		Image:   canvas.NewImageFromImage(img),
-		data:    data,
-	}
-	return &ib
-}
-
-func (ib *ImageButtonWithData[T]) CreateRenderer() fyne.WidgetRenderer {
-	return widget.NewSimpleRenderer(ib.Image)
-}
-
-func (ib *ImageButtonWithData[T]) Tapped(ev *fyne.PointEvent) {
-	ib.onClick(ib.data)
-}
-
-*/
+const IMAGE_THREADS = 8
 
 type GUI struct {
 	window   fyne.Window
@@ -141,6 +39,8 @@ type GUI struct {
 	basedirsState map[int64]binding.Bool
 
 	imageList *ImageList
+	log       *widget.Entry
+	imgInfo   *widget.Entry
 
 	indexingDialogue *ImageProcessDialogue
 	active           bool
@@ -155,6 +55,7 @@ func NewGUI(window fyne.Window, db *Database) *GUI {
 		basedirsState: make(map[int64]binding.Bool),
 		guiBasedirs:   container.NewVBox(),
 	}
+	gui.Build()
 	return &gui
 }
 
@@ -180,6 +81,7 @@ func (gui *GUI) activateAll() {
 func (gui *GUI) rebuildBasedirs() {
 	basedirs, err := gui.db.GetAllBasedir()
 	if err != nil {
+		gui.ShowError(err)
 		return // TODO: Log
 	}
 	gui.guiBasedirs.RemoveAll()
@@ -190,25 +92,10 @@ func (gui *GUI) rebuildBasedirs() {
 		if !ok {
 			oldstate = binding.NewBool()
 		}
-		check := widget.NewCheckWithData(midTruncateString(basedir.Directory, 36), oldstate)
+		check := widget.NewCheckWithData(imagedbutil.MidTruncateString(basedir.Directory, 36), oldstate)
 		gui.basedirsState[basedir.ID] = oldstate
 		gui.guiBasedirs.Add(check)
 	}
-}
-
-func midTruncateString(str string, maxlen int) string {
-	const trimPosition = 10 // X characters before the end of string
-	const trimStr = "[…]"
-	strlen := len(str)
-
-	if len(str) <= maxlen {
-		return str
-	}
-	if maxlen < trimPosition {
-		return str[:maxlen-len(trimStr)] + trimStr
-	}
-	prefix := str[:(maxlen - (trimPosition + len(trimStr)))]
-	return prefix + trimStr + str[strlen-trimPosition:]
 }
 
 // list of basedir IDs that the user has enabled in the UI
@@ -222,7 +109,7 @@ func (gui *GUI) getActiveBasedirsID() []int64 {
 				ints = append(ints, id)
 			}
 		} else {
-			// TODO: Log err
+			gui.ShowError(err)
 		}
 
 	}
@@ -234,8 +121,8 @@ func (gui *GUI) getActiveBasedirs() []Basedir {
 	filteredBasedirs := make([]Basedir, 0)
 	activeIDs := gui.getActiveBasedirsID()
 	allBasedirs, err := gui.db.GetAllBasedir()
-	//TODO: log err
 	if err != nil {
+		gui.ShowError(err)
 	}
 	for _, bd := range allBasedirs {
 		if slices.Contains(activeIDs, bd.ID) {
@@ -279,7 +166,11 @@ func (gui *GUI) buildIndexButtons() *fyne.Container {
 			dialog.NewInformation("", "Select only exactly one index first", gui.window).Show()
 			return
 		}
-		gui.indexingDialogue.Show("db.sqlite", activeBasedirs[0])
+		err := gui.indexingDialogue.Show("db.sqlite", activeBasedirs[0])
+		if err != nil {
+			gui.ShowError(err)
+			return
+		}
 	})
 
 	deleteIndexBtn := widget.NewButton("Delete", func() {
@@ -302,7 +193,8 @@ func (gui *GUI) buildIndexButtons() *fyne.Container {
 	gui.actables = append(gui.actables, &updateIndexBtn.DisableableWidget)
 	gui.actables = append(gui.actables, &deleteIndexBtn.DisableableWidget)
 	indexesButtons := container.NewHBox(addIndexBtn, updateIndexBtn, deleteIndexBtn)
-	return indexesButtons
+	padded := container.New(layout.NewCustomPaddedLayout(0, 0, 48, 48), indexesButtons)
+	return padded
 }
 
 /*
@@ -324,66 +216,225 @@ func loadPNGFromFile(filePath string) (image.Image, error) {
 }
 */
 
+// todo: this should be a new object type
+func (gui *GUI) buildSearchGUI() *fyne.Container {
+	searchbox := widget.NewEntry()
+	btn := widget.NewButton("Search", func() {
+		if len(searchbox.Text) == 0 {
+			gui.QueryNone()
+			return
+		}
+		gui.QueryText(searchbox.Text, APISERVER)
+	})
+
+	final := container.NewGridWithColumns(2, searchbox, btn)
+
+	return final
+}
+
+// generates a queryfilter based on the GUI's current settings
+// todo: gui interface for more settings
+func (gui *GUI) getQueryFilter() QueryFilter {
+	return QueryFilter{BaseDirs: gui.getActiveBasedirsID(), Limit: 64}
+}
+
+func (gui *GUI) QueryText(query string, server string) {
+	client := embeddingserver.NewClient(server)
+	embedding, err := client.GetTextEmbedding(query)
+	if err != nil {
+		gui.ShowError(err)
+		return
+	}
+	embeddingBytes, err := sqlite_vec.SerializeFloat32(embedding.Embedding)
+	if err != nil {
+		gui.ShowError(err)
+		return
+	}
+	gui.QueryImages(embeddingBytes)
+}
+
+// Finds and displays images in the database that are most similar to the provided embedding data.
+// see also: sqlite_vec.SerializeFloat32
+func (gui *GUI) QueryImages(embedding []byte) {
+	imgs, err := gui.db.MatchEmbeddingsWithFilter(embedding, gui.getQueryFilter())
+	if err != nil {
+		gui.ShowError(err)
+		return
+	}
+	gui.ShowImages(imgs)
+}
+
+// the query to use when no search text or image have been specified
+func (gui *GUI) QueryNone() {
+	basedirs := gui.getActiveBasedirsID()
+	if len(basedirs) == 0 {
+		gui.ShowError(fmt.Errorf("no active basedirs to query"))
+		return
+	}
+	imgs, err := gui.db.ReadImages(QueryFilter{Limit: 128, BaseDirs: basedirs}, OrderByAestheticDesc)
+	if err != nil {
+		gui.ShowError(err)
+		return
+	}
+	gui.ShowImages(imgs)
+}
+
+func (gui *GUI) ShowError(err error) {
+	gui.log.Append(err.Error() + "\n")
+}
+
+func (gui *GUI) ShowImageDetails(img Image) {
+	var sb strings.Builder
+	sb.WriteString(img.GetRealPath())
+	sb.WriteString("\n w: ")
+	sb.WriteString(strconv.Itoa(int(img.Width)))
+	sb.WriteString("  h: ")
+	sb.WriteString(strconv.Itoa(int(img.Height)))
+	sb.WriteString("\n Aesthetic: ")
+	sb.WriteString(fmt.Sprintf("%v \n", img.Aesthetic.Float64))
+	gui.imgInfo.Text = sb.String()
+	gui.imgInfo.Refresh()
+}
+
+/*
+// Update gui content to display the given images in order.
+// trivial version with careless threading.
+
+	func (gui *GUI) ShowImages(dbImages []Image) {
+		gui.imageList.Clear()
+		dbImages, err := gui.db.AugmentImages(dbImages)
+		if err != nil {
+			panic(err)
+		}
+		for _, img := range dbImages {
+			//todo: is it threadsafe to add to imageList like this?
+			//todo: preserve order
+			go func() {
+				imgImg, err := img.Load()
+				imgImg = imageutil.ScaleImageRGBA(imgImg, THUMBNAIL_SIZE)
+				if err != nil {
+					panic(err)
+				}
+				gui.imageList.AddImage(imgImg, img)
+				imgImg = nil
+
+			}()
+		}
+	}
+*/
+
+func (gui *GUI) ShowImages(dbImages []Image) {
+	gui.imageList.Clear()
+
+	type resultData struct {
+		index   int
+		img     image.Image
+		imgData Image
+		err     error
+	}
+	type jobData struct {
+		index int
+		img   Image
+	}
+
+	// Augment images
+	augmentedImages, err := gui.db.AugmentImages(dbImages)
+	if err != nil {
+		gui.ShowError(fmt.Errorf("error augmenting images: %v", err))
+		return
+	}
+
+	// Create channels for jobs and results
+	jobs := make(chan jobData, len(augmentedImages))
+	results := make(chan resultData, len(augmentedImages))
+
+	var wg sync.WaitGroup
+
+	// Start worker pool
+	for range IMAGE_THREADS {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				// Load and scale the image
+				imgImg, err := job.img.Load()
+				if err != nil {
+					results <- resultData{index: job.index, err: err}
+					continue
+				}
+
+				scaledImg := imageutil.ScaleImageRGBA(imgImg, THUMBNAIL_SIZE)
+				imgImg = nil // Ensure release
+
+				results <- resultData{
+					index:   job.index,
+					img:     scaledImg,
+					imgData: job.img,
+					err:     nil,
+				}
+			}
+		}()
+	}
+
+	// Send jobs to workers
+	for i, img := range augmentedImages {
+		jobs <- jobData{index: i, img: img}
+	}
+	close(jobs)
+
+	// Close the results channel when all workers are done
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results in order
+	orderedResults := make([]resultData, len(augmentedImages))
+
+	for result := range results {
+		if result.err != nil {
+			gui.ShowError(fmt.Errorf("error loading image %d: %v", result.index, result.err))
+		}
+		orderedResults[result.index] = resultData{img: result.img, imgData: result.imgData, err: result.err}
+	}
+
+	// Add images to the list in order
+	for _, result := range orderedResults {
+		if result.err != nil || result.img == nil {
+			continue // Skip failed images. error already displayed earlier.
+		}
+		gui.imageList.AddImage(result.img, result.imgData)
+	}
+	gui.imageList.Refresh()
+}
+
 /* Display a pop-up menu when an image is clicked (for now, I don't care which mouse button clicked.)
  */
 func (gui *GUI) ShowThumbnailMenu(pe *fyne.PointEvent, im Image) {
 
+	gui.ShowImageDetails(im)
+
 	items := []*fyne.MenuItem{
 		fyne.NewMenuItem("Open Image", func() {
-			//todo: gui err
 			err := open.Run(im.GetRealPath())
 			if err != nil {
-				panic(err)
+				gui.ShowError(err)
+				return
 			}
 		}),
 		fyne.NewMenuItem("Find Similar Images", func() {
 			data, err := gui.db.ReadEmbedding(im.ID)
-			// todo: GUI err
 			if err != nil {
-				panic(err)
+				gui.ShowError(err)
+				return
 			}
-			basedirs := gui.getActiveBasedirsID()
-			imgs, err := gui.db.MatchEmbeddingsWithFilter(data, QueryFilter{Limit: 64, BaseDirs: basedirs})
-			if err != nil {
-				panic(err)
-			}
-			gui.ShowImages(imgs)
+			gui.QueryImages(data)
 		}),
 	}
 	menu := fyne.NewMenu("Image", items...)
 
 	popup := widget.NewPopUpMenu(menu, gui.window.Canvas())
 	popup.ShowAtPosition(pe.AbsolutePosition)
-}
-
-// todo: this should be a new object type
-func (gui *GUI) buildSearchGUI() *fyne.Container {
-	searchbox := widget.NewEntry()
-	btn := widget.NewButton("Search", func() {
-		if len(searchbox.Text) == 0 {
-			gui.EmptyQuery()
-			return
-		}
-		// get text embedding
-		client := embeddingserver.NewClient(APISERVER)
-		embedding, err := client.GetTextEmbedding(searchbox.Text)
-		if err != nil {
-			panic(err)
-		}
-		embeddingBytes, err := sqlite_vec.SerializeFloat32(embedding.Embedding)
-		if err != nil {
-			panic(err)
-		}
-		images, err := gui.db.MatchEmbeddingsWithFilter(embeddingBytes, QueryFilter{BaseDirs: gui.getActiveBasedirsID(), Limit: 64})
-		if err != nil {
-			panic(err)
-		}
-		gui.ShowImages(images)
-	})
-
-	final := container.NewGridWithColumns(2, searchbox, btn)
-
-	return final
 }
 
 // assembles the main gui window and wires all the components on it
@@ -399,13 +450,14 @@ func (gui *GUI) Build() {
 	imgInfoLabel := widget.NewLabel("Image Info")
 	appLogLabel := widget.NewLabel("Log")
 
-	imgInfo := widget.NewRichText()
-	appLog := widget.NewRichText()
-	appLog.AppendMarkdown("**Started**")
+	gui.imgInfo = widget.NewMultiLineEntry()
+	gui.log = widget.NewMultiLineEntry()
+	gui.log.Append("Started\n")
+	split := widget.NewSeparator()
 	leftContainer := container.NewVBox(
-		indexesLabel, basedirsWrapper, indexesButtons,
-		imgInfoLabel, imgInfo,
-		appLogLabel, appLog,
+		indexesLabel, basedirsWrapper, indexesButtons, split,
+		imgInfoLabel, gui.imgInfo,
+		appLogLabel, gui.log,
 	)
 	// RIGHT ----------------------------------------------------
 	searchbox := gui.buildSearchGUI()
@@ -416,10 +468,9 @@ func (gui *GUI) Build() {
 	// DIALOGUES ---------------------------------------------------
 	gui.indexingDialogue = NewImageProcessDialogue(gui.window)
 
-	//split := widget.NewSeparator()
 	total := container.NewBorder(nil, nil, leftContainer, nil, rightContainer)
 	gui.window.SetContent(total)
-	gui.window.Resize(fyne.NewSquareSize(600))
+	gui.window.Resize(fyne.NewSquareSize(900))
 }
 
 type ImageProcessDialogue struct {
@@ -495,115 +546,4 @@ func NewImageProcessDialogue(w fyne.Window) *ImageProcessDialogue {
 		ipd.CustomDialog.Hide()
 	}))
 	return ipd
-}
-
-// the query to use when no search text or image have been specified
-func (gui *GUI) EmptyQuery() {
-	basedirs := gui.getActiveBasedirsID()
-	if len(basedirs) == 0 {
-		return
-	}
-	imgs, err := gui.db.ReadImages(QueryFilter{Limit: 128, BaseDirs: basedirs}, OrderByAestheticDesc)
-	if err != nil {
-		panic(err)
-	}
-	gui.ShowImages(imgs)
-}
-
-/*
-// Update gui content to display the given images in order.
-// trivial version with careless threading.
-
-	func (gui *GUI) ShowImages(dbImages []Image) {
-		gui.imageList.Clear()
-		dbImages, err := gui.db.AugmentImages(dbImages)
-		if err != nil {
-			panic(err)
-		}
-		for _, img := range dbImages {
-			//todo: is it threadsafe to add to imageList like this?
-			//todo: preserve order
-			go func() {
-				imgImg, err := img.Load()
-				imgImg = imageutil.ScaleImageRGBA(imgImg, THUMBNAIL_SIZE)
-				if err != nil {
-					panic(err)
-				}
-				gui.imageList.AddImage(imgImg, img)
-				imgImg = nil
-
-			}()
-		}
-	}
-*/
-func (gui *GUI) ShowImages(dbImages []Image) {
-	gui.imageList.Clear()
-	type resultData struct {
-		index   int
-		img     image.Image
-		imgData Image
-		err     error
-	}
-
-	// Augment images
-	augmentedImages, err := gui.db.AugmentImages(dbImages)
-	if err != nil {
-		log.Printf("Error augmenting images: %v", err)
-		return
-	}
-
-	// Create channels for results and errors
-	results := make(chan resultData, len(augmentedImages))
-
-	var wg sync.WaitGroup
-
-	// Process each image in a goroutine
-	for i, img := range augmentedImages {
-		wg.Add(1)
-		go func(index int, img Image) {
-			defer wg.Done()
-
-			// Load and scale the image
-			imgImg, err := img.Load()
-			if err != nil {
-				results <- resultData{index: index, err: err}
-				return
-			}
-
-			scaledImg := imageutil.ScaleImageRGBA(imgImg, THUMBNAIL_SIZE)
-			imgImg = nil // Ensure release, I'm paranoid.
-
-			results <- resultData{
-				index:   index,
-				img:     scaledImg,
-				imgData: img,
-				err:     nil,
-			}
-		}(i, img)
-	}
-
-	// Close the results channel when all goroutines are done
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	// Collect results in order
-	orderedResults := make([]resultData, len(augmentedImages))
-
-	for result := range results {
-		if result.err != nil {
-			log.Printf("Error loading image %d: %v", result.index, result.err)
-		}
-		orderedResults[result.index] = resultData{img: result.img, imgData: result.imgData, err: result.err}
-	}
-
-	// Add images to the list in order
-	for _, result := range orderedResults {
-		if result.err != nil || result.img == nil {
-			continue // Skip failed images. TODO: gui error
-		}
-		gui.imageList.AddImage(result.img, result.imgData)
-	}
-	gui.imageList.Refresh()
 }
