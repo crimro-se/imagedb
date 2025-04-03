@@ -1,6 +1,6 @@
 # imagedb
 
-A GUI software to facilitate searching an untagged collection of images locally.
+A GUI software to facilitate indexing and searching an untagged collection of images locally.
 
 ![screenshot](imagedb.jpg)
 
