@@ -13,7 +13,7 @@ A GUI software to facilitate indexing and searching an untagged collection of im
 
 ## Installing and Running
 
-- git clone this project
+- git clone this project  `git clone https://github.com/crimro-se/imagedb.git`
 - Create and activate either a [python venv](https://docs.python.org/3/library/venv.html) or [conda environment](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html)
 - `cd embeddingserver`
 - if your hardware requires a specialist [pytorch installation](https://pytorch.org/get-started/locally/) (AMD gpu, etc), do that manually first.
