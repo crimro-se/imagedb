@@ -532,7 +532,7 @@ func NewImageProcessDialogue(w fyne.Window) *ImageProcessDialogue {
 		startBtn.Disable()
 		go func() {
 			logBox.Append("Started\n")
-			threadsToUse := max(runtime.NumCPU()-2, 2)
+			threadsToUse := max(runtime.NumCPU()-4, 2)
 			aw := archivewalk.NewArchiveWalker(threadsToUse, errCh, true, true, ipd.processor.Handler)
 			aw.Walk(ipd.basedir.Directory, ipd.ctx)
 			logBox.Append("Done\n")

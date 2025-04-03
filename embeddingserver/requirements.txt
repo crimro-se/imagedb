@@ -1,0 +1,6 @@
+litserve
+Pillow
+pytorch_lightning
+safetensors
+torch
+transformers
