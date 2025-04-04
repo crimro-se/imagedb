@@ -15,10 +15,10 @@ type ImageList struct {
 }
 
 // The GUI element we use to display many images, typically query results.
-func NewImageList(clickCallback func(*fyne.PointEvent, Image)) *ImageList {
+func NewImageList(clickCallback func(*fyne.PointEvent, Image), thumbSize int) *ImageList {
 	il := ImageList{
 		callback:  clickCallback,
-		Container: container.NewGridWrap(fyne.NewSquareSize(float32(THUMBNAIL_SIZE))), // TODO: de-hardcode this
+		Container: container.NewGridWrap(fyne.NewSquareSize(float32(thumbSize))), // TODO: de-hardcode this
 	}
 	return &il
 }

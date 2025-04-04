@@ -15,7 +15,14 @@ func main() {
 		return
 	}
 	defer db.Close()
-	gui := NewGUI(w, db)
+
+	conf, err := LoadConfig("config.ini")
+	if err != nil {
+		fmt.Println(err)
+		// nb: should be safe to continue regardless
+	}
+
+	gui := NewGUI(w, db, conf)
 	_ = gui
 	w.ShowAndRun()
 

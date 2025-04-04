@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"image"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -24,15 +23,10 @@ import (
 	"github.com/skratchdot/open-golang/open"
 )
 
-var THUMBNAIL_SIZE = 256
-
-const APISERVER = "http://localhost:5000"
-
-const IMAGE_THREADS = 8
-
 type GUI struct {
 	window   fyne.Window
 	db       *Database
+	conf     *Config
 	actables []*widget.DisableableWidget
 
 	guiBasedirs   *fyne.Container //vbox container
@@ -46,10 +40,11 @@ type GUI struct {
 	active           bool
 }
 
-func NewGUI(window fyne.Window, db *Database) *GUI {
+func NewGUI(window fyne.Window, db *Database, conf *Config) *GUI {
 	gui := GUI{
 		window:   window,
 		db:       db,
+		conf:     conf,
 		actables: make([]*widget.DisableableWidget, 0),
 
 		basedirsState: make(map[int64]binding.Bool),
@@ -166,7 +161,7 @@ func (gui *GUI) buildIndexButtons() *fyne.Container {
 			dialog.NewInformation("", "Select only exactly one index first", gui.window).Show()
 			return
 		}
-		err := gui.indexingDialogue.Show("db.sqlite", activeBasedirs[0])
+		err := gui.indexingDialogue.Show("db.sqlite", activeBasedirs[0], gui.conf.API_SERVER)
 		if err != nil {
 			gui.ShowError(err)
 			return
@@ -224,7 +219,7 @@ func (gui *GUI) buildSearchGUI() *fyne.Container {
 			gui.QueryNone()
 			return
 		}
-		gui.QueryText(searchbox.Text, APISERVER)
+		gui.QueryText(searchbox.Text, gui.conf.API_SERVER)
 	})
 
 	final := container.NewGridWithColumns(2, searchbox, btn)
@@ -235,7 +230,7 @@ func (gui *GUI) buildSearchGUI() *fyne.Container {
 // generates a queryfilter based on the GUI's current settings
 // todo: gui interface for more settings
 func (gui *GUI) getQueryFilter() QueryFilter {
-	return QueryFilter{BaseDirs: gui.getActiveBasedirsID(), Limit: 64}
+	return QueryFilter{BaseDirs: gui.getActiveBasedirsID(), Limit: gui.conf.QUERY_RESULTS}
 }
 
 func (gui *GUI) QueryText(query string, server string) {
@@ -351,7 +346,7 @@ func (gui *GUI) ShowImages(dbImages []Image) {
 	var wg sync.WaitGroup
 
 	// Start worker pool
-	for range IMAGE_THREADS {
+	for range gui.conf.THREADS_FOR_THUMBNAILS {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -363,7 +358,7 @@ func (gui *GUI) ShowImages(dbImages []Image) {
 					continue
 				}
 
-				scaledImg := imageutil.ScaleImageRGBA(imgImg, THUMBNAIL_SIZE)
+				scaledImg := imageutil.ScaleImageRGBA(imgImg, gui.conf.IMAGE_SIZE_THUMBNAIL)
 				imgImg = nil // Ensure release
 
 				results <- resultData{
@@ -461,12 +456,12 @@ func (gui *GUI) Build() {
 	)
 	// RIGHT ----------------------------------------------------
 	searchbox := gui.buildSearchGUI()
-	gui.imageList = NewImageList(gui.ShowThumbnailMenu)
+	gui.imageList = NewImageList(gui.ShowThumbnailMenu, gui.conf.IMAGE_SIZE_THUMBNAIL)
 	scroll := container.NewVScroll(gui.imageList)
 	rightContainer := container.NewBorder(searchbox, nil, nil, nil, scroll)
 
 	// DIALOGUES ---------------------------------------------------
-	gui.indexingDialogue = NewImageProcessDialogue(gui.window)
+	gui.indexingDialogue = NewImageProcessDialogue(gui.window, gui.conf.THREADS_FOR_INDEXING)
 
 	total := container.NewBorder(nil, nil, leftContainer, nil, rightContainer)
 	gui.window.SetContent(total)
@@ -475,6 +470,7 @@ func (gui *GUI) Build() {
 
 type ImageProcessDialogue struct {
 	*dialog.CustomDialog
+	threads       int
 	processor     *ImageProcessor
 	displayedPath binding.String
 	basedir       Basedir
@@ -483,11 +479,11 @@ type ImageProcessDialogue struct {
 }
 
 // prepares the dialogue for use then shows it
-func (ipd *ImageProcessDialogue) Show(dbfile string, basedir Basedir) error {
+func (ipd *ImageProcessDialogue) Show(dbfile string, basedir Basedir, apiserver string) error {
 	var err error
 	ipd.basedir = basedir
 	ipd.displayedPath.Set(basedir.Directory)
-	ipd.processor, err = NewImageProcessor(dbfile, basedir, APISERVER)
+	ipd.processor, err = NewImageProcessor(dbfile, basedir, apiserver)
 	if err != nil {
 		return err
 	}
@@ -497,7 +493,7 @@ func (ipd *ImageProcessDialogue) Show(dbfile string, basedir Basedir) error {
 }
 
 // a dialogue that handles directory walking and indexing
-func NewImageProcessDialogue(w fyne.Window) *ImageProcessDialogue {
+func NewImageProcessDialogue(w fyne.Window, threads int) *ImageProcessDialogue {
 	content := container.NewVBox()
 	ipd := &ImageProcessDialogue{
 		CustomDialog:  dialog.NewCustomWithoutButtons("Indexing", content, w),
@@ -532,8 +528,7 @@ func NewImageProcessDialogue(w fyne.Window) *ImageProcessDialogue {
 		startBtn.Disable()
 		go func() {
 			logBox.Append("Started\n")
-			threadsToUse := max(runtime.NumCPU()-4, 2)
-			aw := archivewalk.NewArchiveWalker(threadsToUse, errCh, true, true, ipd.processor.Handler)
+			aw := archivewalk.NewArchiveWalker(threads, errCh, true, true, ipd.processor.Handler)
 			aw.Walk(ipd.basedir.Directory, ipd.ctx)
 			logBox.Append("Done\n")
 		}()
