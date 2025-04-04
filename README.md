@@ -13,6 +13,7 @@ A GUI software to facilitate indexing and searching an untagged collection of im
 
 ## Installing and Running
 
+- [Go](https://go.dev) and [cgo](https://github.com/go101/go101/wiki/CGO-Environment-Setup) are required for compiling or running the UI
 - git clone this project  `git clone https://github.com/crimro-se/imagedb.git`
 - Create and activate either a [python venv](https://docs.python.org/3/library/venv.html) or [conda environment](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html)
 - `cd embeddingserver`
@@ -28,6 +29,7 @@ A GUI software to facilitate indexing and searching an untagged collection of im
 - Select the folder you want to index with the directory selector UI.
 - Now you should see that directory added to the list of indexes at the top left. Click on it to check it.
 - Click on the Update button and start the indexing process.
+- You can change settings by editing `config.ini` and restarting the UI.
 
 ## Why
 
