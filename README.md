@@ -13,7 +13,7 @@ A GUI software to facilitate indexing and searching an untagged collection of im
 
 ## Installing and Running
 
-- [Go](https://go.dev) and [cgo](https://github.com/go101/go101/wiki/CGO-Environment-Setup) are required for compiling or running the UI
+- [Go](https://go.dev) and [cgo](https://github.com/go101/go101/wiki/CGO-Environment-Setup) are required for compiling or running the UI from source (I may eventually add an actual *release*)
 - git clone this project  `git clone https://github.com/crimro-se/imagedb.git`
 - Create and activate either a [python venv](https://docs.python.org/3/library/venv.html) or [conda environment](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html)
 - `cd embeddingserver`
