@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"image"
 	"os"
-	"strings"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
+	"github.com/crimro-se/imagedb/imagedbutil"
 	"github.com/crimro-se/imagedb/querystructs"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
@@ -36,17 +36,10 @@ type Image struct {
 	FileSize    int64           `db:"filesize"`
 }
 
-func addTrailingSlash(path string) string {
-	if !strings.HasSuffix(path, "/") {
-		return path + "/"
-	}
-	return path
-}
-
 // todo: handle archives
 // the image's BasedirPath needs to be set first
 func (dbImg *Image) GetRealPath() string {
-	return addTrailingSlash(dbImg.BasedirPath) + addTrailingSlash(dbImg.Path) + dbImg.SubPath
+	return imagedbutil.AddTrailingSlash(dbImg.BasedirPath) + imagedbutil.AddTrailingSlash(dbImg.Path) + dbImg.SubPath
 }
 
 // todo: handle archives

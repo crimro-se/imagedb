@@ -24,3 +24,10 @@ func MidTruncateString(str string, maxlen int) string {
 	prefix := str[:(maxlen - (trimPosition + len(trimStr)))]
 	return prefix + trimStr + str[strlen-trimPosition:]
 }
+
+func AddTrailingSlash(path string) string {
+	if !strings.HasSuffix(path, "/") {
+		return path + "/"
+	}
+	return path
+}
