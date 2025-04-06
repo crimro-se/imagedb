@@ -34,3 +34,10 @@ A GUI software to facilitate indexing and searching an untagged collection of im
 ## Why
 
 This was an experimental project just to try out [sqlite-vec](https://github.com/asg017/sqlite-vec) (a vector database plugin for sqlite) as well as the [Fyne](https://fyne.io/) UI library for Golang.
+
+## Todo
+
+- I think I'll drop the `embeddings` sqlite-vec virtual table from the database entirely, due to various limitations with virtual tables.
+- CLIP is dated, I'll try replacing it with a modern embedding model such as SigLIP-2
+- Add progress indicators for various actions
+- Indexing dialogue could at least count completed images
