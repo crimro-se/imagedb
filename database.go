@@ -201,19 +201,6 @@ func (s *Database) CreateUpdateImage(img *Image) (int64, error) {
 	}
 }
 
-/*
-// returns some images from the db, sorted by path
-func (s *Database) ReadImages(limit, offset int, so SortOrder) ([]Image, error) {
-	imgs := make([]Image, 0)
-	err := s.con.Select(&imgs, `
-	SELECT rowid,*
-	FROM images
-    `+sortOrderToQuery(so)+`
-	LIMIT ? OFFSET ?`, limit, offset)
-	return imgs, err
-}
-*/
-
 // returns some images from the db, filtered via Query Filter
 // nb: empty query filter won't work, at least set the Limit
 func (s *Database) ReadImages(qf QueryFilter, so SortOrder) ([]Image, error) {
@@ -287,38 +274,6 @@ func (s *Database) MatchImagesByPath(parent_path, sub_path string, basedirID int
 	}
 
 	return imgs, err
-}
-
-// embedding search function
-func (s *Database) MatchEmbeddings(target []float32, limit int) ([]Image, error) {
-	if limit <= 0 {
-		return nil, errors.New("limit must be greater than zero")
-	}
-
-	targetEmbedding, err := sqlite_vec.SerializeFloat32(target)
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize target embedding: %w", err)
-	}
-
-	const query = `
-		WITH emb AS (
-			SELECT rowid,distance 
-			FROM embeddings 
-			WHERE embedding match ? 
-			ORDER BY distance 
-			LIMIT ?
-		) 
-		SELECT images.rowid,images.* 
-		FROM images, emb 
-		WHERE images.rowid = emb.rowid 
-		ORDER BY emb.distance ASC`
-	images := make([]Image, 0)
-	err = s.con.Select(&images, query, targetEmbedding, limit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to match embeddings: %w", err)
-	}
-
-	return images, err
 }
 
 func (s *Database) ReadEmbedding(imageRowID int64) ([]byte, error) {

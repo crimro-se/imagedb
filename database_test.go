@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"testing"
 
+	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -106,7 +107,11 @@ func TestDatabase(t *testing.T) {
 	emb[0] = 1
 	emb[1] = 1
 	emb[3] = 1.9
-	imgs2, err := db.MatchEmbeddings(emb, 2)
+	embBytes, err := sqlite_vec.SerializeFloat32(emb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	imgs2, err := db.MatchEmbeddingsWithFilter(embBytes, QueryFilter{Limit: 3, BaseDirs: []int64{1}})
 	if err != nil {
 		t.Fatal(err)
 	}
