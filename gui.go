@@ -37,6 +37,7 @@ type GUI struct {
 	imgInfo   *widget.Entry
 
 	indexingDialogue *ImageProcessDialogue
+	busyDialogue     *BusyDialogue
 	active           bool
 }
 
@@ -291,34 +292,8 @@ func (gui *GUI) ShowImageDetails(img Image) {
 	gui.imgInfo.Refresh()
 }
 
-/*
-// Update gui content to display the given images in order.
-// trivial version with careless threading.
-
-	func (gui *GUI) ShowImages(dbImages []Image) {
-		gui.imageList.Clear()
-		dbImages, err := gui.db.AugmentImages(dbImages)
-		if err != nil {
-			panic(err)
-		}
-		for _, img := range dbImages {
-			//todo: is it threadsafe to add to imageList like this?
-			//todo: preserve order
-			go func() {
-				imgImg, err := img.Load()
-				imgImg = imageutil.ScaleImageRGBA(imgImg, THUMBNAIL_SIZE)
-				if err != nil {
-					panic(err)
-				}
-				gui.imageList.AddImage(imgImg, img)
-				imgImg = nil
-
-			}()
-		}
-	}
-*/
-
 func (gui *GUI) ShowImages(dbImages []Image) {
+	gui.busyDialogue.Show("Resizing images...")
 	gui.imageList.Clear()
 
 	type resultData struct {
@@ -401,6 +376,7 @@ func (gui *GUI) ShowImages(dbImages []Image) {
 		gui.imageList.AddImage(result.img, result.imgData)
 	}
 	gui.imageList.Refresh()
+	gui.busyDialogue.Hide()
 }
 
 /* Display a pop-up menu when an image is clicked (for now, I don't care which mouse button clicked.)
@@ -461,11 +437,41 @@ func (gui *GUI) Build() {
 	rightContainer := container.NewBorder(searchbox, nil, nil, nil, scroll)
 
 	// DIALOGUES ---------------------------------------------------
+	gui.busyDialogue = NewBusyDialogue(gui.window)
 	gui.indexingDialogue = NewImageProcessDialogue(gui.window, gui.conf.THREADS_FOR_INDEXING)
 
 	total := container.NewBorder(nil, nil, leftContainer, nil, rightContainer)
 	gui.window.SetContent(total)
 	gui.window.Resize(fyne.NewSquareSize(900))
+}
+
+type BusyDialogue struct {
+	*dialog.CustomDialog
+	label    *widget.Label
+	activity *widget.Activity
+}
+
+func NewBusyDialogue(w fyne.Window) *BusyDialogue {
+	content := container.NewVBox()
+	bd := &BusyDialogue{
+		CustomDialog: dialog.NewCustomWithoutButtons("Busy", content, w),
+		label:        widget.NewLabel(""),
+		activity:     widget.NewActivity(),
+	}
+	content.Add(bd.label)
+	content.Add(bd.activity)
+	return bd
+}
+
+func (bd *BusyDialogue) Show(text string) {
+	bd.label.SetText(text)
+	bd.activity.Start()
+	bd.CustomDialog.Show()
+}
+
+func (bd *BusyDialogue) Hide() {
+	bd.activity.Stop()
+	bd.CustomDialog.Hide()
 }
 
 type ImageProcessDialogue struct {
