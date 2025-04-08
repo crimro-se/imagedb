@@ -177,12 +177,12 @@ func (gui *GUI) buildIndexButtons() *fyne.Container {
 		}
 
 		gui.deactivateAll()
+		defer gui.activateAll()
 		err := gui.db.DeleteBasedir(activeBasedirs[0].ID)
 		if err != nil {
 			dialog.NewError(err, gui.window).Show()
 		}
 		gui.rebuildBasedirs()
-		gui.activateAll()
 	})
 
 	gui.actables = append(gui.actables, &addIndexBtn.DisableableWidget)
@@ -294,6 +294,7 @@ func (gui *GUI) ShowImageDetails(img Image) {
 
 func (gui *GUI) ShowImages(dbImages []Image) {
 	gui.busyDialogue.Show("Resizing images...")
+	defer gui.busyDialogue.Hide()
 	gui.imageList.Clear()
 
 	type resultData struct {
@@ -376,7 +377,6 @@ func (gui *GUI) ShowImages(dbImages []Image) {
 		gui.imageList.AddImage(result.img, result.imgData)
 	}
 	gui.imageList.Refresh()
-	gui.busyDialogue.Hide()
 }
 
 /* Display a pop-up menu when an image is clicked (for now, I don't care which mouse button clicked.)
