@@ -39,5 +39,4 @@ This was an experimental project just to try out [sqlite-vec](https://github.com
 
 - I think I'll drop the `embeddings` sqlite-vec virtual table from the database entirely, due to various limitations with virtual tables.
 - CLIP is dated, I'll try replacing it with a modern embedding model such as SigLIP-2
-- Add progress indicators for various actions
 - Indexing dialogue could at least count completed images
