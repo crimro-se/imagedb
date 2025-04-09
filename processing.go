@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/crimro-se/imagedb/embeddingserver"
-	"github.com/crimro-se/imagedb/imageutil"
 	"github.com/crimro-se/imagedb/internal/imagedbutil"
+	"github.com/crimro-se/imagedb/pkg/imageutil"
 	"github.com/crimro-se/imagedb/pkg/threadboundresourcepool"
 	"golang.org/x/image/webp"
 )
