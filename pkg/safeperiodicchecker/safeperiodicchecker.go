@@ -3,6 +3,8 @@
 		"shouldn't be called too often" and "it's safe to return a cached value"
 		If the "Callable" interface is too strict for your needs (eg, only a single return value and no parameters)
 		then simply curry your function (use a closure)
+
+		WARNING: currently unused AND untested.
 */
 package safeperiodicchecker
 
