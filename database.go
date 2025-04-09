@@ -9,7 +9,7 @@ import (
 	"os"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
-	"github.com/crimro-se/imagedb/imagedbutil"
+	"github.com/crimro-se/imagedb/internal/imagedbutil"
 	"github.com/crimro-se/imagedb/querystructs"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"

@@ -18,8 +18,8 @@ import (
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/crimro-se/imagedb/archivewalk"
 	"github.com/crimro-se/imagedb/embeddingserver"
-	"github.com/crimro-se/imagedb/imagedbutil"
 	"github.com/crimro-se/imagedb/imageutil"
+	"github.com/crimro-se/imagedb/internal/imagedbutil"
 	"github.com/skratchdot/open-golang/open"
 )
 
