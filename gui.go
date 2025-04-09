@@ -16,10 +16,10 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
-	"github.com/crimro-se/imagedb/archivewalk"
 	"github.com/crimro-se/imagedb/embeddingserver"
 	"github.com/crimro-se/imagedb/imageutil"
 	"github.com/crimro-se/imagedb/internal/imagedbutil"
+	"github.com/crimro-se/imagedb/pkg/archivewalk"
 	"github.com/skratchdot/open-golang/open"
 )
 
