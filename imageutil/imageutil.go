@@ -9,7 +9,7 @@ import (
 	"image/png"
 	"math"
 
-	"github.com/crimro-se/imagedb/stbresize"
+	"github.com/crimro-se/imagedb/pkg/stbresize"
 )
 
 // scales an image whilst preserving aspect ratio
