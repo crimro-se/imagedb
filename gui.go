@@ -223,6 +223,10 @@ func (gui *GUI) buildSearchGUI() *fyne.Container {
 		gui.QueryText(searchbox.Text, gui.conf.API_SERVER)
 	})
 
+	searchbox.OnSubmitted = func(text string) {
+		btn.OnTapped()
+	}
+
 	final := container.NewGridWithColumns(2, searchbox, btn)
 
 	return final
