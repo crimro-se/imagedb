@@ -239,8 +239,11 @@ func (gui *GUI) getQueryFilter() QueryFilter {
 }
 
 func (gui *GUI) QueryText(query string, server string) {
+	gui.busyDialogue.Show("Getting text embedding...")
+
 	client := embeddingserver.NewClient(server)
 	embedding, err := client.GetTextEmbedding(query)
+	gui.busyDialogue.Hide()
 	if err != nil {
 		gui.ShowError(err)
 		return
@@ -250,13 +253,16 @@ func (gui *GUI) QueryText(query string, server string) {
 		gui.ShowError(err)
 		return
 	}
-	gui.QueryImages(embeddingBytes)
+
+	gui.QueryEmbedding(embeddingBytes)
 }
 
 // Finds and displays images in the database that are most similar to the provided embedding data.
 // see also: sqlite_vec.SerializeFloat32
-func (gui *GUI) QueryImages(embedding []byte) {
+func (gui *GUI) QueryEmbedding(embedding []byte) {
+	gui.busyDialogue.Show("Querying database...")
 	imgs, err := gui.db.MatchEmbeddingsWithFilter(embedding, gui.getQueryFilter())
+	gui.busyDialogue.Hide()
 	if err != nil {
 		gui.ShowError(err)
 		return
@@ -403,7 +409,7 @@ func (gui *GUI) ShowThumbnailMenu(pe *fyne.PointEvent, im Image) {
 				gui.ShowError(err)
 				return
 			}
-			gui.QueryImages(data)
+			gui.QueryEmbedding(data)
 		}),
 	}
 	menu := fyne.NewMenu("Image", items...)
