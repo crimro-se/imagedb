@@ -443,7 +443,8 @@ func (gui *GUI) Build() {
 	// RIGHT ----------------------------------------------------
 	searchbox := gui.buildSearchGUI()
 	gui.imageList = NewImageList(gui.ShowThumbnailMenu, gui.conf.IMAGE_SIZE_THUMBNAIL)
-	scroll := container.NewVScroll(gui.imageList)
+	scroll := container.NewVScroll(container.NewStack(gui.imageList))
+	scroll.SetMinSize(fyne.NewSize(400, 400))
 	rightContainer := container.NewBorder(searchbox, nil, nil, nil, scroll)
 
 	// DIALOGUES ---------------------------------------------------
